@@ -42,6 +42,7 @@ public:
     mpq(long int n, long int d):mpq() { mpq_set_si(m_val, n, d); mpq_canonicalize(m_val); }
     mpq(unsigned int n, unsigned int d):mpq() { mpq_set_ui(m_val, n, d); mpq_canonicalize(m_val); }
     mpq(int n, int d):mpq() { mpq_set_si(m_val, n, d); mpq_canonicalize(m_val); }
+    mpq(std::string const & s, unsigned int r): mpq() { mpq_set_str(m_val, s.c_str(), r);};
     ~mpq() { mpq_clear(m_val); }
 
     unsigned hash() const { return static_cast<unsigned>(mpz_get_si(mpq_numref(m_val))); }

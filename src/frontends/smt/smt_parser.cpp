@@ -234,6 +234,9 @@ class parser_fn {
     mpq const & check_hex_next(char const * msg) { check_hex(msg); mpq const & n = curr_num(); return n; }
     /** \brief Throws a parser error if the current token is not DecVal. If it is, move to the next token. */
     mpq const & check_dec_next(char const * msg) { check_dec(msg); mpq const & n = curr_num(); return n; }
+    /** \brief Throws a parser error if the current token is not an identifier named \c op. If it is, move to the next token. */
+    void check_name_next(name const & op, char const * msg) { check_name(op, msg); next(); }
+
 
     /** \brief Initialize \c m_builtins table with Lean builtin symbols that do not have notation associated with them. */
     void init_builtins() {
@@ -313,36 +316,156 @@ class parser_fn {
         return e;
     }
 
-    expr parse_expr() {
+    expr parse_let() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_forall() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_exists() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_attribute() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_id_terms() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_id() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_sort() {
+        /* <sort> ::= <identifier> | ( <identifier> <sort>+ ) */
+        /* TODO */
         switch(curr()) {
+        case scanner::token::Symbol:
+            /* <identifier> */
+            return parse_id();
+        case scanner::token::LeftParen:
+        {
+            expr id = parse_id();
+            next();
+            buffer<expr> sorts;
+            sorts.push_back(parse_sort());
+            next();
+            /* process <sort>* */
+            while(curr_is_symbol() || curr_is_lparen()) {
+                sorts.push_back(parse_sort());
+                next();
+            }
+            check_rparen_next("invalid expression, ')' expected");
+
+
+            break;
+        }
+        default:
+            throw parser_error("parse error in parse_sort()", pos());
+        }
+
+        not_implemented_yet();
+    }
+
+    expr parse_qual_id() {
+        /* <qual identifier> ::= <identifier> | ( as <identifier> <sort> ) */
+        switch(curr()) {
+        case scanner::token::Symbol:
+            /* <identifier> */
+            return parse_id();
+        case scanner::token::LeftParen:
+        {
+            /* ( as <identifier> <sort> ) */
+            next();
+            check_name_next("as", "'as' is required for a qualified identifier");
+            expr id = parse_id();
+            expr s = parse_sort();
+            check_rparen_next("invalid expression, ')' expected");
+            /* TODO */
+            break;
+        }
+        default:
+            throw parser_error("parse error in parse_sort()", pos());
+        }
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_lparen() {
+        auto p = pos();
+        next();
+
+        expr r;
+        switch (curr()) {
+        case scanner::token::Symbol:
+            if(curr_name() == "let") {
+                /* ( let ( <var_binding>+ ) <term> ) */
+                r = parse_let();
+            } else if(curr_name() == "forall") {
+                /* ( forall ( <sorted_var>+ ) <term> ) */
+                r = parse_forall();
+            } else if(curr_name() == "exists") {
+                /* ( exists ( <sorted_var>+ ) <term> ) */
+                r = parse_exists();
+            } else if(curr_name() == "!") {
+                /* ( ! <term> <attribute>+ ) */
+                r = parse_attribute();
+            } else {
+                /* ( <qual_identifier) (term)+ */
+                r = parse_id_terms();
+            }
+            break;
+        case scanner::token::LeftParen:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::StringVal:
+        case scanner::token::NumVal:
+        case scanner::token::BinVal:
+        case scanner::token::HexVal:
+        case scanner::token::DecVal:
+        case scanner::token::Eof:
+            throw parser_error("invalid expression, unexpected token", pos());
+        }
+        r = save(r, p);
+        check_rparen_next("invalid expression, ')' expected");
+        return r;
+    }
+    /**
+       \brief Auxiliary method used when processing the beginning of an expression.
+    */
+    expr parse_nud() {
+        switch (curr()) {
         case scanner::token::NumVal: return parse_num();
         case scanner::token::BinVal: return parse_bin();
         case scanner::token::HexVal: return parse_hex();
         case scanner::token::DecVal: return parse_dec();
         case scanner::token::StringVal: return parse_string();
-        case scanner::token::Symbol:
-            /* TODO */
-            not_implemented_yet();
-            break;
-
-        case scanner::token::LeftParen:
-        {
-            /* TODO */
-            /* ( as <identifier> <sort> ) */
-            /* ( <qual_identifier) (term)+ */
-            /* ( let ( <var_binding>+ ) <term> ) */
-            /* ( forall ( <sorted_var>+ ) <term> ) */
-            /* ( exists ( <sorted_var>+ ) <term> ) */
-            /* ( ! <term> <attribute>+ ) */
-            not_implemented_yet();
-            break;
-        }
+        case scanner::token::LeftParen:  return parse_lparen();
+        case scanner::token::Symbol: return parse_id();
         case scanner::token::Keyword:
         case scanner::token::RightParen:
         case scanner::token::Eof:
             throw parser_error("invalid expression, unexpected token", pos());
         }
         lean_unreachable();
+    }
+
+    expr parse_expr(unsigned rbp = 0) {
+        expr left = parse_nud();
+        // while (rbp < curr_lbp()) {
+        //     left = parse_led(left);
+        // }
+        return left;
     }
 
     void parse_assert() {
@@ -360,20 +483,55 @@ class parser_fn {
            kernel side? */
     }
     void parse_declare_fun() {
-        /* TODO */
         /* declare-fun <symbol> ( <sort>* ) <sort>  */
+        next();
+        expr id = parse_id();
+
+        check_lparen_next("invalid token in declare-fun, '(' expected");
+        buffer<expr> arg_sorts;
+        /* process <sorts>* */
+        while(curr_is_symbol() || curr_is_lparen()) {
+            arg_sorts.push_back(parse_sort());
+            next();
+        }
+        check_rparen_next("invalid token in declare-fun, ')' expected");
+
+        expr ret_sort = parse_sort();
+
+        /* TODO */
+        /* process (id, arg_sorts, ret_sort) */
     }
     void parse_define_fun() {
         /* TODO */
         /* define-fun <symbol> ( <sorted_var>* ) <sort> <term>  */
     }
     void parse_declare_sort() {
-        /* TODO */
         /* declare-sort <symbol> <numeral> */
+        next();
+        expr id = parse_id();
+        next();
+        expr n = parse_num();
+        /* TODO */
+        /* process (id, n) */
     }
     void parse_define_sort() {
-        /* TODO */
         /* define-sort <symbol> ( <symbol> *) <sort>  */
+        next();
+        expr id = parse_id();
+        check_lparen_next("invalid token in define-sort, '(' expected");
+
+        buffer<expr> args;
+        /* process <symbols>* */
+        while(curr_is_symbol()) {
+            args.push_back(parse_id());
+            next();
+        }
+        check_rparen_next("invalid token in define-sort, ')' expected");
+
+        expr s = parse_sort();
+
+        /* TODO */
+        /* process (id, args, s) */
     }
     void parse_exit() {
         /* Nothing */

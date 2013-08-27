@@ -18,12 +18,13 @@ Author: Leonardo de Moura
 #include "expr_maps.h"
 #include "sstream.h"
 #include "kernel_exception.h"
+#include "elaborator.h"
 #include "smt_frontend.h"
 #include "smt_parser.h"
 #include "smt_scanner.h"
 #include "smt_notation.h"
 #include "smt_pp.h"
-#ifdef SMT_USE_READLINE
+#ifdef LEAN_USE_READLINE
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -31,11 +32,30 @@ Author: Leonardo de Moura
 #include <readline/history.h>
 #endif
 
+#ifndef SMT_DEFAULT_PARSER_SHOW_ERRORS
+#define SMT_DEFAULT_PARSER_SHOW_ERRORS true
+#endif
+
+#ifndef SMT_DEFAULT_PARSER_VERBOSE
+#define SMT_DEFAULT_PARSER_VERBOSE true
+#endif
+
 namespace lean {
 namespace smt {
 // ==========================================
-// Builtin commands
+// Parser configuration options
+static name g_parser_verbose     {"smt", "parser", "verbose"};
+static name g_parser_show_errors {"smt", "parser", "show_errors"};
 
+RegisterBoolOption(g_parser_verbose,  SMT_DEFAULT_PARSER_VERBOSE, "(smt parser) disable/enable parser verbose messages");
+RegisterBoolOption(g_parser_show_errors, SMT_DEFAULT_PARSER_SHOW_ERRORS, "(smt parser) display error messages in the regular output channel");
+
+bool     get_parser_verbose(options const & opts)      { return opts.get_bool(g_parser_verbose, SMT_DEFAULT_PARSER_VERBOSE); }
+bool     get_parser_show_errors(options const & opts)  { return opts.get_bool(g_parser_show_errors, SMT_DEFAULT_PARSER_SHOW_ERRORS); }
+// ==========================================
+
+// ==========================================
+// Builtin commands
 static name g_set_logic_kwd("set-logic");
 static name g_set_option_kwd("set-option");
 static name g_set_info_kwd("set-info");
@@ -62,11 +82,8 @@ static list<name> g_command_keywords = {g_set_logic_kwd, g_set_option_kwd, g_set
                                         g_pop_kwd, g_assert_kwd, g_check_sat_kwd, g_get_assertions_kwd,
                                         g_get_proof_kwd, g_get_unsat_core_kwd, g_get_value_kwd, g_get_assignment_kwd,
                                         g_get_option_kwd, g_get_info_kwd, g_exit_kwd};
-
 // ==========================================
-// Auxiliary constant used to mark applications of overloaded operators.
-static name g_overload_name(name(name(name(0u), "parser"), "overload"));
-static expr g_overload = mk_constant(g_overload_name);
+
 // ==========================================
 
 // A name that can't be created by the user.
@@ -75,7 +92,7 @@ static expr g_overload = mk_constant(g_overload_name);
 static name g_unused(name(0u), "parser");
 
 /**
-    \brief Functional object for parsing
+    \brief Actual implementation for the parser functional object
 
     \remark It is an instance of a Pratt parser
     (http://en.wikipedia.org/wiki/Pratt_parser) described in the paper
@@ -83,24 +100,31 @@ static name g_unused(name(0u), "parser");
     and it is easy to support user-defined infix/prefix/postfix/mixfix
     operators.
 */
-class parser_fn {
+class parser::imp {
     typedef scoped_map<name, unsigned, name_hash, name_eq> local_decls;
     typedef std::unordered_map<name, expr, name_hash, name_eq>  builtins;
     typedef std::pair<unsigned, unsigned> pos_info;
     typedef expr_map<pos_info> expr_pos_info;
-
     frontend       m_frontend;
     scanner        m_scanner;
+    elaborator     m_elaborator;
     scanner::token m_curr;
     bool           m_use_exceptions;
-//    bool           m_interactive;
+    bool           m_interactive;
     bool           m_found_errors;
     local_decls    m_local_decls;
     unsigned       m_num_local_decls;
+    context        m_context;
     builtins       m_builtins;
     expr_pos_info  m_expr_pos_info;
     pos_info       m_last_cmd_pos;
+    // Reference to temporary parser used to process import command.
+    // We need this reference to be able to interrupt it.
+    interruptable_ptr<parser>     m_import_parser;
+    interruptable_ptr<normalizer> m_normalizer;
 
+    bool           m_verbose;
+    bool           m_show_errors;
 
     /** \brief Exception used to track parsing erros, it does not leak outside of this class. */
     struct parser_error : public exception {
@@ -114,11 +138,20 @@ class parser_fn {
         local declarations.
     */
     struct mk_scope {
-        parser_fn &           m_fn;
+        imp &                 m_fn;
         local_decls::mk_scope m_scope;
         unsigned              m_old_num_local_decls;
-        mk_scope(parser_fn & fn):m_fn(fn), m_scope(fn.m_local_decls), m_old_num_local_decls(fn.m_num_local_decls) {}
-        ~mk_scope() { m_fn.m_num_local_decls = m_old_num_local_decls; }
+        context               m_old_context;
+        mk_scope(imp & fn):
+            m_fn(fn),
+            m_scope(fn.m_local_decls),
+            m_old_num_local_decls(fn.m_num_local_decls),
+            m_old_context(fn.m_context) {
+        }
+        ~mk_scope() {
+            m_fn.m_num_local_decls = m_old_num_local_decls;
+            m_fn.m_context = m_old_context;
+        }
     };
 
     /** \brief Return the current position information */
@@ -142,11 +175,6 @@ class parser_fn {
     scanner::token curr() const { return m_curr; }
     /** \brief Read the next token if the current one is not End-of-file. */
     void next() { if (m_curr != scanner::token::Eof) scan(); }
-    /** \brief Keep consume tokens until we find a Command or End-of-file. */
-    void sync() {
-        while (curr() != scanner::token::Symbol && curr() != scanner::token::Eof)
-            next();
-    }
 
     /** \brief Return the name associated with the current token. */
     name const & curr_name() const { return m_scanner.get_name_val(); }
@@ -165,7 +193,6 @@ class parser_fn {
         else
             throw parser_error(msg, pos());
     }
-
 
     // =========================
     // curr_is_<token> functions
@@ -237,6 +264,29 @@ class parser_fn {
     /** \brief Throws a parser error if the current token is not an identifier named \c op. If it is, move to the next token. */
     void check_name_next(name const & op, char const * msg) { check_name(op, msg); next(); }
 
+    /**
+       \brief Try to find an object (Definition or Postulate) named \c
+       id in the frontend/environment. If there isn't one, then tries
+       to check if \c id is a builtin symbol. If it is not throws an error.
+    */
+    expr get_name_ref(name const & id, pos_info const & p) {
+        object const & obj = m_frontend.find_object(id);
+        if (obj) {
+            object_kind k      = obj.kind();
+            if (k == object_kind::Definition || k == object_kind::Postulate)
+                return mk_constant(obj.get_name());
+            else
+                throw parser_error(sstream() << "invalid object reference, object '" << id << "' is not an expression.", p);
+        }
+        else {
+            auto it = m_builtins.find(id);
+            if (it != m_builtins.end()) {
+                return it->second;
+            } else {
+                throw parser_error(sstream() << "unknown identifier '" << id << "'", p);
+            }
+        }
+    }
 
     /** \brief Initialize \c m_builtins table with Lean builtin symbols that do not have notation associated with them. */
     void init_builtins() {
@@ -244,36 +294,6 @@ class parser_fn {
         m_builtins["true"]   = True;
         m_builtins["false"]  = False;
         m_builtins["Int"]    = Int;
-        /* Real, List, Set, BitVec, FixedSizeList */
-    }
-
-    [[ noreturn ]] void not_implemented_yet() {
-        // TODO
-        throw parser_error("not implemented yet", pos());
-    }
-
-    /**
-       @name Parse Expressions
-    */
-    /*@{*/
-
-    /**
-       \brief Return the function associated with the given operator.
-       If the operator has been overloaded, it returns an expression
-       of the form (overload f_k ... (overload f_2 f_1) ...)
-       where f_i's are different options.
-       After we finish parsing, the procedure #elaborate will
-       resolve/decide which f_i should be used.
-    */
-    expr mk_fun(operator_info const & op) {
-        list<expr> const & fs = op.get_exprs();
-        lean_assert(!is_nil(fs));
-        auto it = fs.begin();
-        expr r = *it;
-        ++it;
-        for (; it != fs.end(); ++it)
-            r = mk_app(g_overload, *it, r);
-        return r;
     }
 
     expr parse_num() {
@@ -311,9 +331,19 @@ class parser_fn {
         not_implemented_yet();
     }
 
-    expr elaborate(expr const & e) {
+    [[ noreturn ]] void not_implemented_yet() {
         // TODO
-        return e;
+        throw parser_error("not implemented yet", pos());
+    }
+
+    expr elaborate(expr const & e) {
+        if (has_metavar(e)) {
+            // TODO fix
+            m_elaborator.display(std::cerr);
+            throw parser_error("expression contains metavariables... not implemented yet.", m_last_cmd_pos);
+        } else {
+            return e;
+        }
     }
 
     expr parse_let() {
@@ -342,39 +372,33 @@ class parser_fn {
     }
 
     expr parse_id() {
-        /* TODO */
-        not_implemented_yet();
+        name id = check_symbol_next("identifier expected");
+        return get_name_ref(id, pos());
     }
 
     expr parse_sort() {
         /* <sort> ::= <identifier> | ( <identifier> <sort>+ ) */
-        /* TODO */
         switch(curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
             return parse_id();
         case scanner::token::LeftParen:
         {
-            expr id = parse_id();
+            expr id = save(parse_id(), pos());
             next();
-            buffer<expr> sorts;
-            sorts.push_back(parse_sort());
+            expr ret = save(mk_app(id, parse_sort()), pos());
             next();
             /* process <sort>* */
             while(curr_is_symbol() || curr_is_lparen()) {
-                sorts.push_back(parse_sort());
+                ret = save(mk_app(ret, parse_sort()), pos());
                 next();
             }
             check_rparen_next("invalid expression, ')' expected");
-
-
-            break;
+            return ret;
         }
         default:
             throw parser_error("parse error in parse_sort()", pos());
         }
-
-        not_implemented_yet();
     }
 
     expr parse_qual_id() {
@@ -469,13 +493,16 @@ class parser_fn {
     }
 
     void parse_assert() {
-        /* (assert) */
+        /* assert <term> */
         lean_assert(curr_is_symbol() && curr_name() == g_assert_kwd);
         next();
-        expr v = elaborate(parse_expr());
-        expr t = infer_type(v, m_frontend);
-        /* TODO : Check t = bool */
-        regular(m_frontend) << t << endl;
+        name id = name("assert", pos().first);
+        expr e = parse_expr();
+        std::cerr << "1";
+        m_frontend.add_axiom(id, e);
+        std::cerr << "2";
+        if (m_verbose)
+            regular(m_frontend) << "  Assumed: " << id << " = " << e << endl;
     }
     void parse_check_sat() {
         /* (check-sat) */
@@ -485,34 +512,71 @@ class parser_fn {
     void parse_declare_fun() {
         /* declare-fun <symbol> ( <sort>* ) <sort>  */
         next();
-        expr id = parse_id();
+        name id = check_symbol_next("invalid fun declaration, identifier expected");
 
         check_lparen_next("invalid token in declare-fun, '(' expected");
         buffer<expr> arg_sorts;
         /* process <sorts>* */
         while(curr_is_symbol() || curr_is_lparen()) {
-            arg_sorts.push_back(parse_sort());
-            next();
+            expr sort = parse_sort();
+            std::cout << "parsed sort : " << sort << std::endl;
+            arg_sorts.push_back(sort);
+            std::cout << "curr = " << curr() << std::endl;
         }
         check_rparen_next("invalid token in declare-fun, ')' expected");
-
         expr ret_sort = parse_sort();
 
-        /* TODO */
-        /* process (id, arg_sorts, ret_sort) */
+        size_t n = arg_sorts.size();
+        while(n-- > 0) {
+            ret_sort = mk_arrow(arg_sorts[n], ret_sort);
+        }
+
+        m_frontend.add_var(id, ret_sort);
+        if(m_verbose)
+            regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
     }
     void parse_define_fun() {
         /* TODO */
         /* define-fun <symbol> ( <sorted_var>* ) <sort> <term>  */
+        next();
+        name id = check_symbol_next("invalid fun declaration, identifier expected");
+
+        check_lparen_next("invalid token in declare-fun, '(' expected");
+        buffer<expr> arg_sorts;
+        /* process <sorts>* */
+        while(curr_is_symbol() || curr_is_lparen()) {
+            expr sort = parse_sort();
+            std::cout << "parsed sort : " << sort << std::endl;
+            arg_sorts.push_back(sort);
+            std::cout << "curr = " << curr() << std::endl;
+        }
+        check_rparen_next("invalid token in declare-fun, ')' expected");
+        expr ret_sort = parse_sort();
+
+        expr body = parse_expr();
+
+        size_t n = arg_sorts.size();
+        while(n-- > 0) {
+            ret_sort = mk_arrow(arg_sorts[n], ret_sort);
+        }
+
+        m_frontend.add_var(id, ret_sort);
+        if(m_verbose)
+            regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
+
     }
     void parse_declare_sort() {
         /* declare-sort <symbol> <numeral> */
         next();
-        expr id = parse_id();
-        next();
-        expr n = parse_num();
-        /* TODO */
-        /* process (id, n) */
+        name id = check_symbol_next("invalid sort declaration, identifier expected");
+        expr type = Type();
+        mpz n = int_value_numeral(parse_num());
+        while(n-- > 0) {
+            type = mk_arrow(Type(), type);
+        }
+        m_frontend.add_var(id, type);
+        if(m_verbose)
+            regular(m_frontend) << " declare_sort " << id << " : " << type << endl;
     }
     void parse_define_sort() {
         /* define-sort <symbol> ( <symbol> *) <sort>  */
@@ -601,8 +665,9 @@ class parser_fn {
         else if (cmd_id == g_set_logic_kwd     ) parse_set_logic();
         else if (cmd_id == g_set_option_kwd    ) parse_set_option();
         else { lean_unreachable(); }
+
+        check_rparen_next("invalid command, ')' expected");
     }
-    /*@}*/
 
     void display_error_pos(unsigned line, unsigned pos) { regular(m_frontend) << "Error (line: " << line << ", pos: " << pos << ")"; }
     void display_error_pos(pos_info const & p) { display_error_pos(p.first, p.second); }
@@ -631,16 +696,42 @@ class parser_fn {
         sync();
     }
 
+    void updt_options() {
+        m_verbose = get_parser_verbose(m_frontend.get_state().get_options());
+        m_show_errors = get_parser_show_errors(m_frontend.get_state().get_options());
+    }
+
+    /** \brief Keep consuming tokens until we find a Command or End-of-file. */
+    void sync() {
+        show_prompt();
+        while (curr() != scanner::token::Symbol && curr() != scanner::token::Eof)
+            next();
+    }
+
 public:
-    parser_fn(frontend & fe, std::istream & in, bool use_exceptions):
+    imp(frontend & fe, std::istream & in, bool use_exceptions, bool interactive):
         m_frontend(fe),
         m_scanner(in),
-        m_use_exceptions(use_exceptions) {
+        m_elaborator(fe),
+        m_use_exceptions(use_exceptions),
+        m_interactive(interactive) {
+        updt_options();
         m_found_errors = false;
         m_num_local_decls = 0;
 //        m_scanner.set_command_keywords(g_command_keywords);
         init_builtins();
         scan();
+    }
+
+    static void show_prompt(bool interactive, frontend const & fe) {
+        if (interactive) {
+            regular(fe) << "# ";
+            regular(fe).flush();
+        }
+    }
+
+    void show_prompt() {
+        show_prompt(m_interactive, m_frontend);
     }
 
     /** \brief Parse a sequence of commands. This method also perform error management. */
@@ -649,58 +740,90 @@ public:
             try {
                 switch (curr()) {
                 case scanner::token::LeftParen: parse_command(); break;
+//                case scanner::token::Period: show_prompt(); next(); break;
                 case scanner::token::Eof: return !m_found_errors;
                 default:
+                    std::cerr << "Current token is |" << curr() << "|" << std::endl;
                     throw parser_error("Command expected", pos());
                 }
             } catch (parser_error & ex) {
                 m_found_errors = true;
+                if (m_show_errors)
+                    display_error(ex.what(), ex.m_pos.first, ex.m_pos.second);
                 if (m_use_exceptions) {
                     throw parser_exception(ex.what(), ex.m_pos.first, ex.m_pos.second);
-                } else {
-                    display_error(ex.what(), ex.m_pos.first, ex.m_pos.second);
                 }
             } catch (kernel_exception & ex) {
                 m_found_errors = true;
-                if (m_use_exceptions) {
-                    throw;
-                } else {
+                if (m_show_errors)
                     display_error(ex);
-                }
-            } catch (interrupted & ex) {
-                if (m_use_exceptions) {
+                if (m_use_exceptions)
                     throw;
-                } else {
+            } catch (interrupted & ex) {
+                if (m_verbose)
                     regular(m_frontend) << "\n!!!Interrupted!!!" << endl;
-                    sync();
-                }
+                sync();
+                if (m_use_exceptions)
+                    throw;
             } catch (exception & ex) {
                 m_found_errors = true;
-                if (m_use_exceptions) {
-                    throw;
-                } else {
+                if (m_show_errors)
                     display_error(ex.what());
-                }
+                if (m_use_exceptions)
+                    throw;
             }
         }
     }
 
-    // /** \brief Parse an expression. */
-    // expr parse_expr_main() {
-    //     try {
-    //         return elaborate(parse_expr());
-    //     } catch (parser_error & ex) {
-    //         throw parser_exception(ex.what(), m_scanner.get_line(), m_scanner.get_pos());
-    //     }
-    // }
+    /** \brief Parse an expression. */
+    expr parse_expr_main() {
+        try {
+            return elaborate(parse_expr());
+        } catch (parser_error & ex) {
+            throw parser_exception(ex.what(), ex.m_pos.first, ex.m_pos.second);
+        }
+    }
 
+    void set_interrupt(bool flag) {
+        m_frontend.set_interrupt(flag);
+        m_elaborator.set_interrupt(flag);
+        m_import_parser.set_interrupt(flag);
+        m_normalizer.set_interrupt(flag);
+    }
+
+    void reset_interrupt() {
+        set_interrupt(false);
+    }
 };
-bool parse_commands(frontend & fe, std::istream & in, bool use_exceptions) {
-    return parser_fn(fe, in, use_exceptions).parse_commands();
+
+parser::parser(frontend fe, std::istream & in, bool use_exceptions, bool interactive) {
+    parser::imp::show_prompt(interactive, fe);
+    m_ptr.reset(new imp(fe, in, use_exceptions, interactive));
 }
 
-bool parse_commands_from_stdin(frontend & fe) {
-#ifdef SMT_USE_READLINE
+parser::~parser() {
+}
+
+bool parser::operator()() {
+    return m_ptr->parse_commands();
+}
+
+void parser::set_interrupt(bool flag) {
+    m_ptr->set_interrupt(flag);
+}
+
+expr parser::parse_expr() {
+    return m_ptr->parse_expr_main();
+}
+
+shell::shell(frontend & fe):m_frontend(fe) {
+}
+
+shell::~shell() {
+}
+
+bool shell::operator()() {
+#ifdef LEAN_USE_READLINE
     bool errors = false;
     char * input;
     while (true) {
@@ -709,17 +832,23 @@ bool parse_commands_from_stdin(frontend & fe) {
             return errors;
         add_history(input);
         std::istringstream strm(input);
-        if (!parse_commands(fe, strm, false, false))
-            errors = true;
+        {
+            parser p(m_frontend, strm, false, false);
+            scoped_set_interruptable_ptr<parser> set(m_parser, &p);
+            if (!p())
+                errors = true;
+        }
         free(input);
     }
 #else
-    return parse_commands(fe, std::cin, false) ? 0 : 1;
+    parser p(m_frontend, std::cin, false, true);
+    scoped_set_interruptable_ptr<parser> set(m_parser, &p);
+    return p();
 #endif
 }
 
-// expr parse_expr(frontend const & fe, std::istream & in) {
-//     return parser_fn(const_cast<frontend&>(fe), in, nullptr, nullptr, true).parse_expr_main();
-// }
+void shell::set_interrupt(bool flag) {
+    m_parser.set_interrupt(flag);
+}
 }
 }

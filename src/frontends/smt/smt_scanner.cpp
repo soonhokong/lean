@@ -64,6 +64,14 @@ public:
         // new line
         set('\n', '\n');
 
+        set('#', '#');
+        set('"', '"');
+        set(';', ';');
+        set('(', '(');
+        set(')', ')');
+        set(':', ':');
+        set('|', '|');
+
         // eof
         set(255, -1);
     }
@@ -290,7 +298,7 @@ scanner::token scanner::scan() {
             // Treat this as a beginning of signed number (optional)
             // return read_signed_number();
         case -1:   return token::Eof;
-        default:   lean_unreachable();
+        default:   std::cerr << "Invalid Token: " << c << " " << normalize(c) << std::endl; lean_unreachable();
         }
     }
 }

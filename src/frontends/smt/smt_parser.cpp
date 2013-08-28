@@ -2,7 +2,8 @@
 Copyright (c) 2013 Microsoft Corporation. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 
-Author: Leonardo de Moura
+Author: Soonho Kong
+        Leonardo de Moura
 */
 #include <unordered_map>
 #include "scoped_map.h"
@@ -346,34 +347,110 @@ class parser::imp {
         }
     }
 
-    expr parse_let() {
-        /* TODO */
-        not_implemented_yet();
+    /** \brief Register the name \c n as a local declaration. */
+    void register_binding(name const & n, expr const & type, expr const & val = expr()) {
+        unsigned lvl = m_num_local_decls;
+        if (val)
+            m_context = extend(m_context, n, expr(), val);
+        else
+            m_context = extend(m_context, n, type);
+        m_local_decls.insert(n, lvl);
+        m_num_local_decls++;
+        lean_assert(m_local_decls.find(n)->second == lvl);
     }
 
+    expr parse_let() {
+        /* <term> ::= ( let ( <var_binding>+ ) <term> ) */
+        next();
+
+        // Save scope
+        mk_scope scope(*this);
+        check_lparen_next("'(' expected in parse_let");
+
+        // Process variable bindings
+        buffer<std::tuple<pos_info, name, expr>> bindings;
+        do {
+            std::tuple<pos_info, name, expr> binding = parse_var_binding();
+            register_binding(std::get<1>(binding), expr(), std::get<2>(binding));
+            bindings.push_back(binding);
+        } while (curr_is_lparen());
+        check_rparen_next("')' expected in parse_let");
+
+        // Process term
+        expr r = parse_term();
+        unsigned i = bindings.size();
+        while (i > 0) {
+            --i;
+            auto p = std::get<0>(bindings[i]);
+            r = save(mk_let(std::get<1>(bindings[i]), std::get<2>(bindings[i]), r), p);
+        }
+        return r;
+    }
+
+    expr parse_quantifier(bool is_forall) {
+        /* <term> ::= ( forall/exists ( <sorted_var>+ ) <term> ) */
+        next();
+        mk_scope scope(*this);
+
+        // Process <sorted_var>+
+        check_lparen_next("'(' expected in parse_quantifier");
+        buffer<std::tuple<pos_info, name, expr>> bindings;
+        do {
+            std::tuple<pos_info, name, expr> binding = parse_sorted_var();
+            register_binding(std::get<1>(binding), expr(), std::get<2>(binding));
+            bindings.push_back(binding);
+        } while (curr_is_lparen());
+        check_rparen_next("')' expected in parse_quantifier");
+
+        // Process <term>
+        expr result = parse_term();
+
+        // Construct mk_<quantifier>
+        unsigned i = bindings.size();
+        while (i > 0) {
+            --i;
+            pos_info p = std::get<0>(bindings[i]);
+            expr lambda = save(mk_lambda(std::get<1>(bindings[i]), std::get<2>(bindings[i]), result), p);
+            if (is_forall)
+                result = save(mk_forall(std::get<2>(bindings[i]), lambda), p);
+            else
+                result = save(mk_exists(std::get<2>(bindings[i]), lambda), p);
+        }
+        return result;
+    }
+
+
     expr parse_forall() {
-        /* TODO */
-        not_implemented_yet();
+        return parse_quantifier(true);
     }
 
     expr parse_exists() {
-        /* TODO */
-        not_implemented_yet();
+        return parse_quantifier(false);
     }
 
     expr parse_attribute() {
+        /* <attribute>       ::= <keyword> | <keyword> <attribute_value> */
+        /* <attribute_value> ::= <spec_constant> | <symbol> | (<s_expr>* */
         /* TODO */
         not_implemented_yet();
     }
 
     expr parse_id_terms() {
+        /* <term> ::= ( <qual_identifier> <term>+ ) */
         /* TODO */
         not_implemented_yet();
     }
 
     expr parse_id() {
-        name id = check_symbol_next("identifier expected");
-        return get_name_ref(id, pos());
+        auto p = pos();
+        name id = curr_name();
+        next();
+        auto it = m_local_decls.find(id);
+        if (it != m_local_decls.end()) {
+            return save(mk_var(m_num_local_decls - it->second - 1), p);
+        } else {
+            return save(get_name_ref(id, p), p);
+        }
     }
 
     expr parse_sort() {
@@ -384,17 +461,14 @@ class parser::imp {
             return parse_id();
         case scanner::token::LeftParen:
         {
-            expr id = save(parse_id(), pos());
             next();
-            expr ret = save(mk_app(id, parse_sort()), pos());
-            next();
+            expr s = parse_id();
             /* process <sort>* */
-            while(curr_is_symbol() || curr_is_lparen()) {
-                ret = save(mk_app(ret, parse_sort()), pos());
-                next();
-            }
-            check_rparen_next("invalid expression, ')' expected");
-            return ret;
+            do {
+                s = mk_app(s, parse_sort());
+            } while(curr_is_symbol() || curr_is_lparen());
+            check_rparen_next("')' expected in parse_sort()");
+            return s;
         }
         default:
             throw parser_error("parse error in parse_sort()", pos());
@@ -402,7 +476,7 @@ class parser::imp {
     }
 
     expr parse_qual_id() {
-        /* <qual identifier> ::= <identifier> | ( as <identifier> <sort> ) */
+        /* <qual_identifier> ::= <identifier> | ( as <identifier> <sort> ) */
         switch(curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
@@ -414,7 +488,7 @@ class parser::imp {
             check_name_next("as", "'as' is required for a qualified identifier");
             expr id = parse_id();
             expr s = parse_sort();
-            check_rparen_next("invalid expression, ')' expected");
+            check_rparen_next("')' expected in parse_qual_id()");
             /* TODO */
             break;
         }
@@ -434,18 +508,23 @@ class parser::imp {
         case scanner::token::Symbol:
             if(curr_name() == "let") {
                 /* ( let ( <var_binding>+ ) <term> ) */
+                std::cerr << "parse_let begin" << std::endl;
                 r = parse_let();
             } else if(curr_name() == "forall") {
                 /* ( forall ( <sorted_var>+ ) <term> ) */
+                std::cerr << "parse_forall begin" << std::endl;
                 r = parse_forall();
             } else if(curr_name() == "exists") {
                 /* ( exists ( <sorted_var>+ ) <term> ) */
+                std::cerr << "parse_exists begin" << std::endl;
                 r = parse_exists();
             } else if(curr_name() == "!") {
                 /* ( ! <term> <attribute>+ ) */
+                std::cerr << "parse_attribute begin" << std::endl;
                 r = parse_attribute();
             } else {
                 /* ( <qual_identifier) (term)+ */
+                std::cerr << "parse_id_terms begin" << std::endl;
                 r = parse_id_terms();
             }
             break;
@@ -458,10 +537,10 @@ class parser::imp {
         case scanner::token::HexVal:
         case scanner::token::DecVal:
         case scanner::token::Eof:
-            throw parser_error("invalid expression, unexpected token", pos());
+            throw parser_error("unexpected token in parse_lparen()", pos());
         }
         r = save(r, p);
-        check_rparen_next("invalid expression, ')' expected");
+        check_rparen_next("')' expected in parse_lparen()");
         return r;
     }
     /**
@@ -476,41 +555,58 @@ class parser::imp {
         case scanner::token::StringVal: return parse_string();
         case scanner::token::LeftParen:  return parse_lparen();
         case scanner::token::Symbol: return parse_id();
-        case scanner::token::Keyword:
-        case scanner::token::RightParen:
-        case scanner::token::Eof:
-            throw parser_error("invalid expression, unexpected token", pos());
+        default:
+            throw parser_error("unexpected token in parse_nud()", pos());
         }
-        lean_unreachable();
     }
 
-    expr parse_expr(unsigned rbp = 0) {
+    expr parse_term(unsigned rbp = 0) {
         expr left = parse_nud();
-        // while (rbp < curr_lbp()) {
-        //     left = parse_led(left);
-        // }
         return left;
     }
 
+    std::tuple<pos_info, name, expr> parse_sorted_var() {
+        /* <sorted_var> ::= ( symbol sort ) */
+        auto p = pos();
+        check_lparen_next("sorted_var: '(' expected");
+        name id = check_symbol_next("invalid fun declaration, identifier expected");
+        normalizer norm(m_frontend);
+        scoped_set_interruptable_ptr<normalizer> set(m_normalizer, &norm);
+        expr sort = norm(parse_sort());
+        check_rparen_next("sorted_var: ')' expected");
+        return std::make_tuple(p, id, sort);
+    }
+
+    std::tuple<pos_info, name, expr> parse_var_binding() {
+        /* <var_binding> ::= ( <symbol> <term> ) */
+        auto p = pos();
+        check_lparen_next("var_binding: '(' expected");
+        name id = check_symbol_next("identifier expected in parse_var_binding");
+        expr term = parse_term();
+        check_rparen_next("var_binding: ')' expected");
+        return std::make_tuple(p, id, term);
+    }
+
     void parse_assert() {
-        /* assert <term> */
+        /* <command> ::= ( assert <term> ) */
         lean_assert(curr_is_symbol() && curr_name() == g_assert_kwd);
         next();
         name id = name("assert", pos().first);
-        expr e = parse_expr();
-        std::cerr << "1";
+        expr e = parse_term();
         m_frontend.add_axiom(id, e);
-        std::cerr << "2";
         if (m_verbose)
             regular(m_frontend) << "  Assumed: " << id << " = " << e << endl;
     }
     void parse_check_sat() {
-        /* (check-sat) */
+        /* <command> ::= ( check-sat ) */
+        next();
+        if (m_verbose)
+            regular(m_frontend) << "  check-sat: " << endl;
         /* TODO: what should we construct for "check-sat" on the
            kernel side? */
     }
     void parse_declare_fun() {
-        /* declare-fun <symbol> ( <sort>* ) <sort>  */
+        /* <command> ::= ( declare-fun <symbol> ( <sort>* ) <sort> ) */
         next();
         name id = check_symbol_next("invalid fun declaration, identifier expected");
 
@@ -519,14 +615,12 @@ class parser::imp {
         /* process <sorts>* */
         while(curr_is_symbol() || curr_is_lparen()) {
             expr sort = parse_sort();
-            std::cout << "parsed sort : " << sort << std::endl;
             arg_sorts.push_back(sort);
-            std::cout << "curr = " << curr() << std::endl;
         }
         check_rparen_next("invalid token in declare-fun, ')' expected");
         expr ret_sort = parse_sort();
 
-        size_t n = arg_sorts.size();
+        unsigned n = arg_sorts.size();
         while(n-- > 0) {
             ret_sort = mk_arrow(arg_sorts[n], ret_sort);
         }
@@ -535,38 +629,53 @@ class parser::imp {
         if(m_verbose)
             regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
     }
+
+    expr mk_abstraction(buffer<std::tuple<pos_info, name, expr>> const & bindings, expr const & body) {
+        expr result = body;
+        unsigned i = bindings.size();
+        while (i > 0) {
+            --i;
+            pos_info p = std::get<0>(bindings[i]);
+            result = save(mk_lambda(std::get<1>(bindings[i]), std::get<2>(bindings[i]), result), p);
+        }
+        return result;
+    }
+
     void parse_define_fun() {
-        /* TODO */
-        /* define-fun <symbol> ( <sorted_var>* ) <sort> <term>  */
+        /* <command> ::= ( define-fun <symbol> ( <sorted_var>* ) <sort> <term> ) */
         next();
         name id = check_symbol_next("invalid fun declaration, identifier expected");
 
+
         check_lparen_next("invalid token in declare-fun, '(' expected");
-        buffer<expr> arg_sorts;
-        /* process <sorts>* */
-        while(curr_is_symbol() || curr_is_lparen()) {
-            expr sort = parse_sort();
-            std::cout << "parsed sort : " << sort << std::endl;
-            arg_sorts.push_back(sort);
-            std::cout << "curr = " << curr() << std::endl;
+        // Save scope
+        mk_scope scope(*this);
+        buffer<std::tuple<pos_info, name, expr>> sorted_vars;
+        /* process <sorted_var>* */
+        while(curr_is_lparen()) {
+            std::tuple<pos_info, name, expr> binding = parse_sorted_var();
+            sorted_vars.push_back(binding);
+            register_binding(std::get<1>(binding), std::get<2>(binding));
         }
         check_rparen_next("invalid token in declare-fun, ')' expected");
         expr ret_sort = parse_sort();
+        expr body = parse_term();
 
-        expr body = parse_expr();
-
-        size_t n = arg_sorts.size();
-        while(n-- > 0) {
-            ret_sort = mk_arrow(arg_sorts[n], ret_sort);
+        unsigned i = sorted_vars.size();
+        while(i-- > 0) {
+            ret_sort = mk_arrow(std::get<2>(sorted_vars[i]), ret_sort);
         }
 
-        m_frontend.add_var(id, ret_sort);
-        if(m_verbose)
-            regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
+        expr abs = mk_abstraction(sorted_vars, body);
 
+        m_frontend.add_definition(id, ret_sort, abs);
+        if(m_verbose)
+            regular(m_frontend) << " define-fun "
+                                << id << " : " << ret_sort
+                                << " = "<< abs << endl;
     }
     void parse_declare_sort() {
-        /* declare-sort <symbol> <numeral> */
+        /* <command> ::= ( declare-sort <symbol> <numeral> ) */
         next();
         name id = check_symbol_next("invalid sort declaration, identifier expected");
         expr type = Type();
@@ -576,28 +685,48 @@ class parser::imp {
         }
         m_frontend.add_var(id, type);
         if(m_verbose)
-            regular(m_frontend) << " declare_sort " << id << " : " << type << endl;
+            regular(m_frontend) << " declare-sort " << id << " : " << type << endl;
     }
     void parse_define_sort() {
-        /* define-sort <symbol> ( <symbol> *) <sort>  */
+        /* <command> ::= ( define-sort <symbol> ( <symbol> *) <sort> ) */
         next();
-        expr id = parse_id();
+        name id = check_symbol_next("invalid sort declaration, identifier expected");
         check_lparen_next("invalid token in define-sort, '(' expected");
 
-        buffer<expr> args;
+        buffer<std::tuple<pos_info, name, expr>> args;
         /* process <symbols>* */
+        mk_scope scope(*this);
         while(curr_is_symbol()) {
-            args.push_back(parse_id());
-            next();
+            auto p = pos();
+            name arg_name = check_symbol_next("invalid sort declaration, identifier expected");
+            args.push_back(std::make_tuple(p, arg_name, Type()));
+            register_binding(arg_name, Type());
         }
         check_rparen_next("invalid token in define-sort, ')' expected");
 
-        expr s = parse_sort();
+        /* process <sort> */
+        expr s = Type();
+        unsigned i = args.size();
+        while(i-- > 0) {
+            s = mk_arrow(Type(), s);
+        }
 
-        /* TODO */
-        /* process (id, args, s) */
+        if(m_verbose)
+            regular(m_frontend) << " define-sort "
+                                << id << " : " << s;
+
+        expr body = parse_sort();
+
+        expr abs = mk_abstraction(args, body);
+        if(m_verbose)
+            regular(m_frontend) << " = "<< abs << endl;
+
+        m_frontend.add_definition(id, s, abs);
+
     }
     void parse_exit() {
+        /* <command> ::= ( exit ) */
+        next();
         /* Nothing */
         /* TODO: what should we construct for this? */
     }
@@ -623,16 +752,86 @@ class parser::imp {
         /* TODO */
     }
     void parse_pop() {
-        /* TODO */
+        /* <command> ::= ( pop <numeral> ) */
+        next();
+        mpz n = int_value_numeral(parse_num());
+        lean_assert(n >= 0);
+        while(n-- > 0) {
+            lean_assert(m_frontend.has_parent());
+            m_frontend = m_frontend.parent();
+            if(m_verbose)
+                regular(m_frontend) << " (pop) " << endl;
+        }
     }
     void parse_push() {
-        /* TODO */
+        next();
+        mpz n = int_value_numeral(parse_num());
+        lean_assert(n >= 0);
+        while(n-- > 0) {
+            m_frontend = m_frontend.mk_child();
+            if(m_verbose)
+                regular(m_frontend) << " (push) " << endl;
+        }
     }
     void parse_set_info() {
         /* TODO */
     }
+
     void parse_set_logic() {
+        next();
+        name logic = check_symbol_next("logic symbol is expected.");
+
         /* TODO */
+    }
+
+    expr parse_keyword() {
+        /* TODO */
+        not_implemented_yet();
+    }
+
+    expr parse_sexpr() {
+        /* <spec_constant> ::= <numeral> | <decimal> | <hexadecimal> | <binary> | <string>  */
+        /* <s_expr> ::= <spec_constant> | <symbol> | <keyword> | ( <s_expr>* ) */
+        switch(curr()) {
+        case scanner::token::NumVal:
+            return parse_num();
+        case scanner::token::DecVal:
+            return parse_dec();
+        case scanner::token::HexVal:
+            return parse_hex();
+        case scanner::token::BinVal:
+            return parse_bin();
+        case scanner::token::StringVal:
+            return parse_string();
+        case scanner::token::Symbol:
+            return parse_id();
+        case scanner::token::Keyword:
+            return parse_keyword();
+        case scanner::token::LeftParen: {
+            next();
+            expr t = parse_sexpr();
+            check_rparen_next("')' expected in parse_sexpr");
+            return t;
+        }
+        default:
+            throw parser_error("parse error in parse_sexpr()", pos());
+        }
+    }
+
+    expr parse_option() {
+        /* <option> ::= :print-success             <b_value> */
+        /*              :expand-definitions        <b_value> */
+        /*              :interactive-mode          <b_value> */
+        /*              :produce-proofs            <b_value> */
+        /*              :produce-unsat-cores       <b_value> */
+        /*              :produce-models            <b_value> */
+        /*              :produce-assignments       <b_value> */
+        /*              :regular-output-channel    <string>  */
+        /*              :diagnostic-output-channel <string>  */
+        /*              :random-seed               <numeral> */
+        /*              :verbosity                 <numeral> */
+        /*              <attribute>                          */
+        return parse_attribute();
     }
     void parse_set_option() {
         /* TODO */
@@ -664,7 +863,7 @@ class parser::imp {
         else if (cmd_id == g_set_info_kwd      ) parse_set_info();
         else if (cmd_id == g_set_logic_kwd     ) parse_set_logic();
         else if (cmd_id == g_set_option_kwd    ) parse_set_option();
-        else { lean_unreachable(); }
+        else { next(); throw parser_error(sstream() << "invalid command '" << cmd_id << "'", m_last_cmd_pos); }
 
         check_rparen_next("invalid command, ')' expected");
     }
@@ -744,6 +943,7 @@ public:
                 case scanner::token::Eof: return !m_found_errors;
                 default:
                     std::cerr << "Current token is |" << curr() << "|" << std::endl;
+                    next();
                     throw parser_error("Command expected", pos());
                 }
             } catch (parser_error & ex) {
@@ -775,14 +975,14 @@ public:
         }
     }
 
-    /** \brief Parse an expression. */
-    expr parse_expr_main() {
-        try {
-            return elaborate(parse_expr());
-        } catch (parser_error & ex) {
-            throw parser_exception(ex.what(), ex.m_pos.first, ex.m_pos.second);
-        }
-    }
+    // /** \brief Parse an expression. */
+    // expr parse_expr_main() {
+    //     try {
+    //         return elaborate(parse_expr());
+    //     } catch (parser_error & ex) {
+    //         throw parser_exception(ex.what(), ex.m_pos.first, ex.m_pos.second);
+    //     }
+    // }
 
     void set_interrupt(bool flag) {
         m_frontend.set_interrupt(flag);
@@ -812,9 +1012,9 @@ void parser::set_interrupt(bool flag) {
     m_ptr->set_interrupt(flag);
 }
 
-expr parser::parse_expr() {
-    return m_ptr->parse_expr_main();
-}
+// expr parser::parse_expr() {
+//     return m_ptr->parse_expr_main();
+// }
 
 shell::shell(frontend & fe):m_frontend(fe) {
 }

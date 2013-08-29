@@ -33,26 +33,90 @@ Author: Soonho Kong
 #include <readline/history.h>
 #endif
 
-#ifndef SMT_DEFAULT_PARSER_SHOW_ERRORS
-#define SMT_DEFAULT_PARSER_SHOW_ERRORS true
+#ifndef SMT_DEFAULT_PARSER_PRINT_SUCCESS
+#define SMT_DEFAULT_PARSER_PRINT_SUCCESS true
 #endif
-
-#ifndef SMT_DEFAULT_PARSER_VERBOSE
-#define SMT_DEFAULT_PARSER_VERBOSE true
+#ifndef SMT_DEFAULT_PARSER_EXPAND_DEFINITIONS
+#define SMT_DEFAULT_PARSER_EXPAND_DEFINITIONS false
+#endif
+#ifndef SMT_DEFAULT_PARSER_INTERACTIVE_MODE
+#define SMT_DEFAULT_PARSER_INTERACTIVE_MODE false
+#endif
+#ifndef SMT_DEFAULT_PARSER_PRODUCE_PROOFS
+#define SMT_DEFAULT_PARSER_PRODUCE_PROOFS false
+#endif
+#ifndef SMT_DEFAULT_PARSER_PRODUCE_UNSAT_CORES
+#define SMT_DEFAULT_PARSER_PRODUCE_UNSAT_CORES false
+#endif
+#ifndef SMT_DEFAULT_PARSER_PRODUCE_MODELS
+#define SMT_DEFAULT_PARSER_PRODUCE_MODELS false
+#endif
+#ifndef SMT_DEFAULT_PARSER_PRODUCE_ASSIGNMENTS
+#define SMT_DEFAULT_PARSER_PRODUCE_ASSIGNMENTS false
+#endif
+#ifndef SMT_DEFAULT_PARSER_REGULAR_OUTPUT_CHANNEL
+#define SMT_DEFAULT_PARSER_REGULAR_OUTPUT_CHANNEL "stdout"
+#endif
+#ifndef SMT_DEFAULT_PARSER_DIAGNOSTIC_OUTPUT_CHANNEL
+#define SMT_DEFAULT_PARSER_DIAGNOSTIC_OUTPUT_CHANNEL "stderr"
+#endif
+#ifndef SMT_DEFAULT_PARSER_RANDOM_SEED
+#define SMT_DEFAULT_PARSER_RANDOM_SEED 0
+#endif
+#ifndef SMT_DEFAULT_PARSER_VERBOSITY
+#define SMT_DEFAULT_PARSER_VERBOSITY 0
 #endif
 
 namespace lean {
 namespace smt {
 // ==========================================
 // Parser configuration options
-static name g_parser_verbose     {"smt", "parser", "verbose"};
-static name g_parser_show_errors {"smt", "parser", "show_errors"};
 
-RegisterBoolOption(g_parser_verbose,  SMT_DEFAULT_PARSER_VERBOSE, "(smt parser) disable/enable parser verbose messages");
-RegisterBoolOption(g_parser_show_errors, SMT_DEFAULT_PARSER_SHOW_ERRORS, "(smt parser) display error messages in the regular output channel");
+/* <option> ::= :print-success             <b_value>, default = true */
+/*              :expand-definitions        <b_value>, default = false */
+/*              :interactive-mode          <b_value>, default = false */
+/*              :produce-proofs            <b_value>, default = false */
+/*              :produce-unsat-cores       <b_value>, default = false */
+/*              :produce-models            <b_value>, default = false */
+/*              :produce-assignments       <b_value>, default = false */
+/*              :regular-output-channel    <string> , default = stdout */
+/*              :diagnostic-output-channel <string> , default = stderr */
+/*              :random-seed               <numeral>, default = 0 */
+/*              :verbosity                 <numeral>, default = 0 */
+static name g_parser_print_success             {"smt", "parser", "print-success"};
+static name g_parser_expand_definitions        {"smt", "parser", "expand-definitions"};
+static name g_parser_interactive_mode          {"smt", "parser", "interactive-mode"};
+static name g_parser_produce_proofs            {"smt", "parser", "produce-proofs"};
+static name g_parser_produce_unsat_cores       {"smt", "parser", "produce-unsat-cores      "};
+static name g_parser_produce_models            {"smt", "parser", "produce-models           "};
+static name g_parser_produce_assignments       {"smt", "parser", "produce-assignments      "};
+static name g_parser_regular_output_channel    {"smt", "parser", "regular-output-channel   "};
+static name g_parser_diagnostic_output_channel {"smt", "parser", "diagnostic-output-channel"};
+static name g_parser_random_seed               {"smt", "parser", "random-seed              "};
+static name g_parser_verbosity                 {"smt", "parser", "verbosity                "};
+RegisterBoolOption(g_parser_print_success              , true ,  "print-success");
+RegisterBoolOption(g_parser_expand_definitions         , false,  "expand-definitions");
+RegisterBoolOption(g_parser_interactive_mode           , false,  "interactive-mode");
+RegisterBoolOption(g_parser_produce_proofs             , false,  "produce-proofs");
+RegisterBoolOption(g_parser_produce_unsat_cores        , false,  "produce-unsat-cores");
+RegisterBoolOption(g_parser_produce_models             , false,  "produce-models");
+RegisterBoolOption(g_parser_produce_assignments        , false,  "produce-assignments");
+RegisterStringOption(g_parser_regular_output_channel   , "cout", "regular-output-channel");
+RegisterStringOption(g_parser_diagnostic_output_channel, "cerr", "diagnostic-output-channel");
+RegisterUnsignedOption(g_parser_random_seed            , 0,      "random-seed");
+RegisterUnsignedOption(g_parser_verbosity              , 0,      "verbosity");
+bool get_parser_print_success (options const & opts) { return opts.get_bool(g_parser_print_success, SMT_DEFAULT_PARSER_PRINT_SUCCESS); }
+bool get_parser_expand_definitions (options const & opts) { return opts.get_bool(g_parser_expand_definitions, SMT_DEFAULT_PARSER_EXPAND_DEFINITIONS); }
+bool get_parser_interactive_mode (options const & opts) { return opts.get_bool(g_parser_interactive_mode, SMT_DEFAULT_PARSER_INTERACTIVE_MODE); }
+bool get_parser_produce_proofs (options const & opts) { return opts.get_bool(g_parser_produce_proofs, SMT_DEFAULT_PARSER_PRODUCE_PROOFS); }
+bool get_parser_produce_unsat_cores (options const & opts) { return opts.get_bool(g_parser_produce_unsat_cores, SMT_DEFAULT_PARSER_PRODUCE_UNSAT_CORES); }
+bool get_parser_produce_models (options const & opts) { return opts.get_bool(g_parser_produce_models, SMT_DEFAULT_PARSER_PRODUCE_MODELS); }
+bool get_parser_produce_assignments (options const & opts) { return opts.get_bool(g_parser_produce_assignments, SMT_DEFAULT_PARSER_PRODUCE_ASSIGNMENTS); }
+std::string get_parser_regular_output_channel (options const & opts) { return opts.get_string(g_parser_regular_output_channel, SMT_DEFAULT_PARSER_REGULAR_OUTPUT_CHANNEL); }
+std::string get_parser_diagnostic_output_channel(options const & opts) { return opts.get_string(g_parser_diagnostic_output_channel, SMT_DEFAULT_PARSER_DIAGNOSTIC_OUTPUT_CHANNEL); }
+unsigned get_parser_random_seed (options const & opts) { return opts.get_unsigned(g_parser_random_seed, SMT_DEFAULT_PARSER_RANDOM_SEED); }
+unsigned get_parser_verbosity (options const & opts) { return opts.get_unsigned(g_parser_verbosity, SMT_DEFAULT_PARSER_VERBOSITY); }
 
-bool     get_parser_verbose(options const & opts)      { return opts.get_bool(g_parser_verbose, SMT_DEFAULT_PARSER_VERBOSE); }
-bool     get_parser_show_errors(options const & opts)  { return opts.get_bool(g_parser_show_errors, SMT_DEFAULT_PARSER_SHOW_ERRORS); }
 // ==========================================
 
 // ==========================================
@@ -428,11 +492,36 @@ class parser::imp {
         return parse_quantifier(false);
     }
 
-    expr parse_attribute() {
+    std::tuple<name, expr> parse_attribute() {
         /* <attribute>       ::= <keyword> | <keyword> <attribute_value> */
-        /* <attribute_value> ::= <spec_constant> | <symbol> | (<s_expr>* */
-        /* TODO */
-        not_implemented_yet();
+        /* <attribute_value> ::= <spec_constant> | <symbol> | ( <s_expr>* ) */
+        name key = curr_name();
+        std::cerr << "Keyword = " << curr_name() << std::endl;
+        next();
+        expr val;
+
+        switch(curr()) {
+        case scanner::token::NumVal:
+        case scanner::token::DecVal:
+        case scanner::token::HexVal:
+        case scanner::token::BinVal:
+        case scanner::token::StringVal:
+            val = parse_spec_constant();
+            break;
+        case scanner::token::Symbol:
+            val = parse_id();
+            break;
+        case scanner::token::LeftParen:
+            next();
+            // TODO: Currently, it's <s_expr>. change to <s_expr>*
+            val = parse_sexpr();
+            check_rparen_next("')' expected in parse_attribute");
+            break;
+        default:
+            /* nothing */
+            break;
+        }
+        return std::make_tuple(key, val);
     }
 
     expr parse_id_terms() {
@@ -521,7 +610,8 @@ class parser::imp {
             } else if(curr_name() == "!") {
                 /* ( ! <term> <attribute>+ ) */
                 std::cerr << "parse_attribute begin" << std::endl;
-                r = parse_attribute();
+                std::tuple<name, expr> attr = parse_attribute();
+                r = std::get<1>(attr);
             } else {
                 /* ( <qual_identifier) (term)+ */
                 std::cerr << "parse_id_terms begin" << std::endl;
@@ -730,25 +820,50 @@ class parser::imp {
         /* Nothing */
         /* TODO: what should we construct for this? */
     }
-    void parse_get_assertions_kwd() {
-        /* TODO: X */
+    void parse_get_assertions() {
+        /* <command> ::= ( get-assertions ) */
+        next();
+        /* TODO */
     }
-    void parse_get_assignment_kwd() {
-        /* TODO: X */
+    void parse_get_assignment() {
+        /* <command> ::= ( get-assignment ) */
+        next();
+        /* TODO */
     }
+
+    void parse_info_flag() {
+
+    }
+
     void parse_get_info() {
-        /* TODO: X */
+        /* <command> ::= ( get-info <info_flag> ) */
+        next();
+        parse_info_flag();
+        /* TODO */
     }
     void parse_get_option() {
+        /* <command> ::= ( get-option <keyword> ) */
+        next();
+        name key = parse_keyword();
         /* TODO */
     }
     void parse_get_proof() {
+        /* <command> ::= ( get-proof ) */
+        next();
         /* TODO */
     }
-    void parse_get_unsat_core_kwd() {
+    void parse_get_unsat_core() {
+        /* <command> ::= ( get-unsat-core ) */
+        next();
         /* TODO */
     }
     void parse_get_value() {
+        /* <command> ::= ( get-value ( <term> + ) ) */
+        next();
+        check_lparen_next("'(' expected in parse_get_value()");
+        /* TODO: process <term>+ */
+        expr term = parse_term();
+        check_rparen_next("')' expected in parse_get_value()");
         /* TODO */
     }
     void parse_pop() {
@@ -774,24 +889,24 @@ class parser::imp {
         }
     }
     void parse_set_info() {
+        /* <command> ::= ( set-info <attribute> ) */
+        next();
+        std::tuple<name, expr> attr = parse_attribute();
         /* TODO */
     }
 
     void parse_set_logic() {
         next();
         name logic = check_symbol_next("logic symbol is expected.");
-
         /* TODO */
     }
 
-    expr parse_keyword() {
-        /* TODO */
-        not_implemented_yet();
+    name parse_keyword() {
+        return curr_name();
     }
 
-    expr parse_sexpr() {
+    expr parse_spec_constant() {
         /* <spec_constant> ::= <numeral> | <decimal> | <hexadecimal> | <binary> | <string>  */
-        /* <s_expr> ::= <spec_constant> | <symbol> | <keyword> | ( <s_expr>* ) */
         switch(curr()) {
         case scanner::token::NumVal:
             return parse_num();
@@ -803,10 +918,24 @@ class parser::imp {
             return parse_bin();
         case scanner::token::StringVal:
             return parse_string();
+        default:
+            throw parser_error("parse error in parse_spec_constant", pos());
+        }
+    }
+
+    expr parse_sexpr() {
+        /* <s_expr> ::= <spec_constant> | <symbol> | <keyword> | ( <s_expr>* ) */
+        switch(curr()) {
+        case scanner::token::NumVal:
+        case scanner::token::DecVal:
+        case scanner::token::HexVal:
+        case scanner::token::BinVal:
+        case scanner::token::StringVal:
+            return parse_spec_constant();
         case scanner::token::Symbol:
             return parse_id();
         case scanner::token::Keyword:
-            return parse_keyword();
+            return expr(parse_keyword());
         case scanner::token::LeftParen: {
             next();
             expr t = parse_sexpr();
@@ -818,22 +947,26 @@ class parser::imp {
         }
     }
 
-    expr parse_option() {
-        /* <option> ::= :print-success             <b_value> */
-        /*              :expand-definitions        <b_value> */
-        /*              :interactive-mode          <b_value> */
-        /*              :produce-proofs            <b_value> */
-        /*              :produce-unsat-cores       <b_value> */
-        /*              :produce-models            <b_value> */
-        /*              :produce-assignments       <b_value> */
-        /*              :regular-output-channel    <string>  */
-        /*              :diagnostic-output-channel <string>  */
-        /*              :random-seed               <numeral> */
-        /*              :verbosity                 <numeral> */
+    std::tuple<name, expr> parse_option() {
+        /* <option> ::= :print-success             <b_value>, default = true */
+        /*              :expand-definitions        <b_value>, default = false */
+        /*              :interactive-mode          <b_value>, default = false */
+        /*              :produce-proofs            <b_value>, default = false */
+        /*              :produce-unsat-cores       <b_value>, default = false */
+        /*              :produce-models            <b_value>, default = false */
+        /*              :produce-assignments       <b_value>, default = false */
+        /*              :regular-output-channel    <string> , default = stdout */
+        /*              :diagnostic-output-channel <string> , default = stderr */
+        /*              :random-seed               <numeral>, default = 0 */
+        /*              :verbosity                 <numeral>, default = 0 */
         /*              <attribute>                          */
+        /* TODO */
         return parse_attribute();
     }
     void parse_set_option() {
+        /* <command> ::= ( set-option <option> ) */
+        next();
+        std::tuple<name, expr> opt = parse_option();
         /* TODO */
     }
 
@@ -896,8 +1029,8 @@ class parser::imp {
     }
 
     void updt_options() {
-        m_verbose = get_parser_verbose(m_frontend.get_state().get_options());
-        m_show_errors = get_parser_show_errors(m_frontend.get_state().get_options());
+        m_verbose = get_parser_verbosity(m_frontend.get_state().get_options());
+//        m_show_errors = get_parser_show_errors(m_frontend.get_state().get_options());
     }
 
     /** \brief Keep consuming tokens until we find a Command or End-of-file. */

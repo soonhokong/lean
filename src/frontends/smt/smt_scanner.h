@@ -45,6 +45,7 @@ protected:
     void  read_comment();
     token read_symbol_core();
     token read_symbol();
+    token read_keyword();
     token read_quoted_symbol();
     token read_string();
     template<typename F> token read_number_radix(unsigned int radix, F check, token ret);

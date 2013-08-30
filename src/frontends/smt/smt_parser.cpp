@@ -506,7 +506,6 @@ class parser::imp {
         /* <attribute>       ::= <keyword> | <keyword> <attribute_value> */
         /* <attribute_value> ::= <spec_constant> | <symbol> | ( <s_expr>* ) */
         name key = curr_name();
-        std::cerr << "Keyword = " << curr_name() << std::endl;
         next();
         expr val;
 
@@ -529,6 +528,7 @@ class parser::imp {
             break;
         default:
             /* nothing */
+            std::cerr << "parse_attribute : nothing" << curr() << std::endl;
             break;
         }
         return std::make_tuple(key, val);
@@ -862,11 +862,45 @@ class parser::imp {
     void parse_get_option() {
         /* <command> ::= ( get-option <keyword> ) */
         next();
-        name key = {"smt", "parser", parse_keyword().to_string().substr(1).c_str()};
-        regular(m_frontend) << "get_option(" << key << ") = "
-                            << m_frontend.get_state().get_options().get_sexpr(key) << endl;
-        /* TODO */
+        name n = {"smt", "parser", parse_keyword().to_string().c_str()};
+
+        auto decl_it = get_option_declarations().find(n);
+        lean_assert(decl_it != get_option_declarations().end());
+        option_kind k = decl_it->second.kind();
+
+        regular(m_frontend) << m_frontend.get_state().get_options()
+                            << endl;
+
+        regular(m_frontend) << "get_option(" << n << ") = ";
+
+        switch(k) {
+        case BoolOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_bool(n)
+                                << endl;
+            break;
+        case IntOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_int(n)
+                                << endl;
+            break;
+        case UnsignedOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_unsigned(n)
+                                << endl;
+            break;
+        case DoubleOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_double(n)
+                                << endl;
+            break;
+        case StringOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_string(n)
+                                << endl;
+            break;
+        case SExprOption:
+            regular(m_frontend) << m_frontend.get_state().get_options().get_sexpr(n)
+                                << endl;
+            break;
+        }
     }
+
     void parse_get_proof() {
         /* <command> ::= ( get-proof ) */
         next();
@@ -985,11 +1019,44 @@ class parser::imp {
         /* TODO */
         return parse_attribute();
     }
+
+    option_kind extract_option_kind(expr & e) {
+        std::cerr << "type of " << e << " is ";
+        expr ty = infer_type(e, m_frontend);
+        std::cerr << ty << std::endl;
+
+        if(ty == Bool) {
+            return BoolOption;
+        } else if (ty == Int) {
+            return UnsignedOption;
+        }
+
+        /* TODO: add Int, Double, String, SExpr options */
+        return SExprOption;
+    }
+
     void parse_set_option() {
-        /* <command> ::= ( set-option <option> ) */
         next();
+
         std::tuple<name, expr> opt = parse_option();
-        m_frontend.set_option(std::get<0>(opt), std::get<1>(opt));
+        name n = name({"smt", "parser", std::get<0>(opt).to_string().c_str()});
+        expr e = std::get<1>(opt);
+        option_kind k = extract_option_kind(e);
+
+        auto decl_it = get_option_declarations().find(n);
+        if(decl_it == get_option_declarations().end()) {
+            // option is not registered
+            std::cerr << "option " << n << " not found." << std::endl;
+            mk_option_declaration(n, k, nullptr, "");
+
+        } else {
+            // option is registered. check out its kind
+            std::cerr << "option " << n << " found." << std::endl;
+            option_kind saved_kind = decl_it->second.kind();
+            lean_assert(k == saved_kind);
+        }
+        /* TODO: do not use expression */
+        m_frontend.set_option(n, e);
     }
 
     /** \brief Parse a Lean command. */
@@ -1050,6 +1117,20 @@ class parser::imp {
         sync();
     }
 
+    void init_options() {
+        m_frontend.set_option(g_parser_print_success              , true );
+        m_frontend.set_option(g_parser_expand_definitions         , false);
+        m_frontend.set_option(g_parser_interactive_mode           , false);
+        m_frontend.set_option(g_parser_produce_proofs             , false);
+        m_frontend.set_option(g_parser_produce_unsat_cores        , false);
+        m_frontend.set_option(g_parser_produce_models             , false);
+        m_frontend.set_option(g_parser_produce_assignments        , false);
+        m_frontend.set_option(g_parser_regular_output_channel     , "cout");
+        m_frontend.set_option(g_parser_diagnostic_output_channel  , "cerr");
+        m_frontend.set_option(g_parser_random_seed                , 0);
+        m_frontend.set_option(g_parser_verbosity                  , 0);
+    }
+
     void updt_options() {
         m_print_success             = get_parser_print_success (m_frontend.get_state().get_options());
         m_expand_definitions        = get_parser_expand_definitions (m_frontend.get_state().get_options());
@@ -1078,6 +1159,7 @@ public:
         m_elaborator(fe),
         m_use_exceptions(use_exceptions),
         m_interactive(interactive) {
+        init_options();
         updt_options();
         m_found_errors = false;
         m_num_local_decls = 0;

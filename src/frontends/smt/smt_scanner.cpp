@@ -171,9 +171,16 @@ scanner::token scanner::read_symbol_core() {
 }
 
 scanner::token scanner::read_symbol() {
-    lean_assert(normalize(curr()) == 'a' || curr() == ':' || curr() == '-');
+    lean_assert(normalize(curr()) == 'a' || curr() == '-');
     m_buffer.clear();
     m_buffer += curr();
+    next();
+    return read_symbol_core();
+}
+
+scanner::token scanner::read_keyword() {
+    lean_assert(normalize(curr() == ':'));
+    m_buffer.clear();
     next();
     return read_symbol_core();
 }
@@ -273,7 +280,7 @@ scanner::token scanner::scan() {
         case ' ':  next(); break;
         case '\n': next(); new_line(); break;
         case ';':  read_comment(); break;
-        case ':':  read_symbol(); return token::Keyword;
+        case ':':  read_keyword(); return token::Keyword;
         case '(':  next(); return token::LeftParen;
         case ')':  next(); return token::RightParen;
         case '|':  return read_quoted_symbol();

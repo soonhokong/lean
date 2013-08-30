@@ -188,8 +188,18 @@ class parser::imp {
     interruptable_ptr<parser>     m_import_parser;
     interruptable_ptr<normalizer> m_normalizer;
 
-    bool           m_verbose;
     bool           m_show_errors;
+    bool           m_print_success;
+    bool           m_expand_definitions;
+    bool           m_interactive_mode;
+    bool           m_produce_proofs;
+    bool           m_produce_unsat_cores;
+    bool           m_produce_models;
+    bool           m_produce_assignments;
+    std::string    m_regular_output_channel;
+    std::string    m_diagnostic_output_channel;
+    unsigned       m_random_seed;
+    unsigned       m_verbosity;
 
     /** \brief Exception used to track parsing erros, it does not leak outside of this class. */
     struct parser_error : public exception {
@@ -684,13 +694,13 @@ class parser::imp {
         name id = name("assert", pos().first);
         expr e = parse_term();
         m_frontend.add_axiom(id, e);
-        if (m_verbose)
+        if (m_verbosity > 0)
             regular(m_frontend) << "  Assumed: " << id << " = " << e << endl;
     }
     void parse_check_sat() {
         /* <command> ::= ( check-sat ) */
         next();
-        if (m_verbose)
+        if (m_verbosity > 0)
             regular(m_frontend) << "  check-sat: " << endl;
         /* TODO: what should we construct for "check-sat" on the
            kernel side? */
@@ -716,7 +726,7 @@ class parser::imp {
         }
 
         m_frontend.add_var(id, ret_sort);
-        if(m_verbose)
+        if(m_verbosity > 0)
             regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
     }
 
@@ -759,7 +769,7 @@ class parser::imp {
         expr abs = mk_abstraction(sorted_vars, body);
 
         m_frontend.add_definition(id, ret_sort, abs);
-        if(m_verbose)
+        if(m_verbosity > 0)
             regular(m_frontend) << " define-fun "
                                 << id << " : " << ret_sort
                                 << " = "<< abs << endl;
@@ -774,7 +784,7 @@ class parser::imp {
             type = mk_arrow(Type(), type);
         }
         m_frontend.add_var(id, type);
-        if(m_verbose)
+        if(m_verbosity > 0)
             regular(m_frontend) << " declare-sort " << id << " : " << type << endl;
     }
     void parse_define_sort() {
@@ -801,14 +811,14 @@ class parser::imp {
             s = mk_arrow(Type(), s);
         }
 
-        if(m_verbose)
+        if(m_verbosity > 0)
             regular(m_frontend) << " define-sort "
                                 << id << " : " << s;
 
         expr body = parse_sort();
 
         expr abs = mk_abstraction(args, body);
-        if(m_verbose)
+        if(m_verbosity > 0)
             regular(m_frontend) << " = "<< abs << endl;
 
         m_frontend.add_definition(id, s, abs);
@@ -831,8 +841,16 @@ class parser::imp {
         /* TODO */
     }
 
-    void parse_info_flag() {
-
+    name parse_info_flag() {
+        /* <info_flag> ::= :error-behavior
+                           :name
+                           :authors
+                           :version
+                           :status
+                           :reason-unknown
+                           ⟨keyword⟩
+                           :all-statistics */
+        return parse_keyword();
     }
 
     void parse_get_info() {
@@ -844,7 +862,9 @@ class parser::imp {
     void parse_get_option() {
         /* <command> ::= ( get-option <keyword> ) */
         next();
-        name key = parse_keyword();
+        name key = {"smt", "parser", parse_keyword().to_string().substr(1).c_str()};
+        regular(m_frontend) << "get_option(" << key << ") = "
+                            << m_frontend.get_state().get_options().get_sexpr(key) << endl;
         /* TODO */
     }
     void parse_get_proof() {
@@ -874,7 +894,7 @@ class parser::imp {
         while(n-- > 0) {
             lean_assert(m_frontend.has_parent());
             m_frontend = m_frontend.parent();
-            if(m_verbose)
+            if(m_verbosity > 0)
                 regular(m_frontend) << " (pop) " << endl;
         }
     }
@@ -884,7 +904,7 @@ class parser::imp {
         lean_assert(n >= 0);
         while(n-- > 0) {
             m_frontend = m_frontend.mk_child();
-            if(m_verbose)
+            if(m_verbosity > 0)
                 regular(m_frontend) << " (push) " << endl;
         }
     }
@@ -902,7 +922,9 @@ class parser::imp {
     }
 
     name parse_keyword() {
-        return curr_name();
+        name n = curr_name();
+        next();
+        return n;
     }
 
     expr parse_spec_constant() {
@@ -935,7 +957,7 @@ class parser::imp {
         case scanner::token::Symbol:
             return parse_id();
         case scanner::token::Keyword:
-            return expr(parse_keyword());
+            return parse_id(); /* TODO: what's the meaning of keyword in sexpression? */
         case scanner::token::LeftParen: {
             next();
             expr t = parse_sexpr();
@@ -967,7 +989,7 @@ class parser::imp {
         /* <command> ::= ( set-option <option> ) */
         next();
         std::tuple<name, expr> opt = parse_option();
-        /* TODO */
+        m_frontend.set_option(std::get<0>(opt), std::get<1>(opt));
     }
 
     /** \brief Parse a Lean command. */
@@ -984,12 +1006,12 @@ class parser::imp {
         else if (cmd_id == g_define_fun_kwd    ) parse_define_fun();
         else if (cmd_id == g_define_sort_kwd   ) parse_define_sort();
         else if (cmd_id == g_exit_kwd          ) parse_exit();
-        else if (cmd_id == g_get_assertions_kwd) parse_get_assertions_kwd();
-        else if (cmd_id == g_get_assignment_kwd) parse_get_assignment_kwd();
+        else if (cmd_id == g_get_assertions_kwd) parse_get_assertions();
+        else if (cmd_id == g_get_assignment_kwd) parse_get_assignment();
         else if (cmd_id == g_get_info_kwd      ) parse_get_info();
         else if (cmd_id == g_get_option_kwd    ) parse_get_option();
         else if (cmd_id == g_get_proof_kwd     ) parse_get_proof();
-        else if (cmd_id == g_get_unsat_core_kwd) parse_get_unsat_core_kwd();
+        else if (cmd_id == g_get_unsat_core_kwd) parse_get_unsat_core();
         else if (cmd_id == g_get_value_kwd     ) parse_get_value();
         else if (cmd_id == g_pop_kwd           ) parse_pop();
         else if (cmd_id == g_push_kwd          ) parse_push();
@@ -1029,8 +1051,17 @@ class parser::imp {
     }
 
     void updt_options() {
-        m_verbose = get_parser_verbosity(m_frontend.get_state().get_options());
-//        m_show_errors = get_parser_show_errors(m_frontend.get_state().get_options());
+        m_print_success             = get_parser_print_success (m_frontend.get_state().get_options());
+        m_expand_definitions        = get_parser_expand_definitions (m_frontend.get_state().get_options());
+        m_interactive_mode          = get_parser_interactive_mode (m_frontend.get_state().get_options());
+        m_produce_proofs            = get_parser_produce_proofs (m_frontend.get_state().get_options());
+        m_produce_unsat_cores       = get_parser_produce_unsat_cores (m_frontend.get_state().get_options());
+        m_produce_models            = get_parser_produce_models (m_frontend.get_state().get_options());
+        m_produce_assignments       = get_parser_produce_assignments (m_frontend.get_state().get_options());
+        m_regular_output_channel    = get_parser_regular_output_channel (m_frontend.get_state().get_options());
+        m_diagnostic_output_channel = get_parser_diagnostic_output_channel(m_frontend.get_state().get_options());
+        m_random_seed               = get_parser_random_seed (m_frontend.get_state().get_options());
+        m_verbosity                 = get_parser_verbosity (m_frontend.get_state().get_options());
     }
 
     /** \brief Keep consuming tokens until we find a Command or End-of-file. */
@@ -1075,7 +1106,7 @@ public:
 //                case scanner::token::Period: show_prompt(); next(); break;
                 case scanner::token::Eof: return !m_found_errors;
                 default:
-                    std::cerr << "Current token is |" << curr() << "|" << std::endl;
+                    std::cerr << "Error in Parse_command: |" << curr() << " " << std::endl;
                     next();
                     throw parser_error("Command expected", pos());
                 }
@@ -1093,7 +1124,7 @@ public:
                 if (m_use_exceptions)
                     throw;
             } catch (interrupted & ex) {
-                if (m_verbose)
+                if (m_verbosity > 0)
                     regular(m_frontend) << "\n!!!Interrupted!!!" << endl;
                 sync();
                 if (m_use_exceptions)

@@ -75,4 +75,5 @@ struct mk_option_declaration {
 #define RegisterBoolOption(N, D, DESC) RegisterOptionCore(N, BoolOption, D, DESC);
 #define RegisterUnsignedOption(N, D, DESC) RegisterOptionCore(N, UnsignedOption, D, DESC);
 #define RegisterStringOption(N, D, DESC) RegisterOptionCore(N, StringOption, D, DESC);
+#define RegisterIntOption(N, D, DESC) RegisterOptionCore(N, IntOption, D, DESC);
 }

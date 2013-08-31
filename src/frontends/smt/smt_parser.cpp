@@ -412,13 +412,13 @@ class parser::imp {
     }
 
     expr elaborate(expr const & e) {
-        if (has_metavar(e)) {
-            // TODO fix
-            m_elaborator.display(std::cerr);
-            throw parser_error("expression contains metavariables... not implemented yet.", m_last_cmd_pos);
-        } else {
+        // if (has_metavar(e)) {
+        //     // TODO fix
+        //     m_elaborator.display(std::cerr);
+        //     throw parser_error("expression contains metavariables... not implemented yet.", m_last_cmd_pos);
+        // } else {
             return e;
-        }
+        // }
     }
 
     /** \brief Register the name \c n as a local declaration. */

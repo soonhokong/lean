@@ -103,8 +103,8 @@ RegisterBoolOption(g_parser_produce_models             , false,  "produce-models
 RegisterBoolOption(g_parser_produce_assignments        , false,  "produce-assignments");
 RegisterStringOption(g_parser_regular_output_channel   , "cout", "regular-output-channel");
 RegisterStringOption(g_parser_diagnostic_output_channel, "cerr", "diagnostic-output-channel");
-RegisterIntOption(g_parser_random_seed            , 0,      "random-seed");
-RegisterIntOption(g_parser_verbosity              , 0,      "verbosity");
+RegisterIntOption(g_parser_random_seed                 , 0,      "random-seed");
+RegisterIntOption(g_parser_verbosity                   , 0,      "verbosity");
 bool get_parser_print_success (options const & opts) { return opts.get_bool(g_parser_print_success, SMT_DEFAULT_PARSER_PRINT_SUCCESS); }
 bool get_parser_expand_definitions (options const & opts) { return opts.get_bool(g_parser_expand_definitions, SMT_DEFAULT_PARSER_EXPAND_DEFINITIONS); }
 bool get_parser_interactive_mode (options const & opts) { return opts.get_bool(g_parser_interactive_mode, SMT_DEFAULT_PARSER_INTERACTIVE_MODE); }

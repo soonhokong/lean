@@ -15,7 +15,7 @@ namespace lean {
     reset the pointer, or invoke the set_interrupt method.
 
     The common usage scenario is:
-    1) Thread A creates creates a new object Obj and invokes set(Obj)
+    1) Thread A creates a new object Obj and invokes set(Obj)
     2) Thread B invokes set_interrupt, which invokes Obj->set_interrupt
     3) Thread A invokes set(nullptr) before deleting Obj.
 

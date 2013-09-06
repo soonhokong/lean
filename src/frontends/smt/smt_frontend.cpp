@@ -6,30 +6,42 @@ Author: Leonardo de Moura
         Soonho Kong
 */
 #include <atomic>
+#include <unordered_set>
 #include "environment.h"
 #include "toplevel.h"
 #include "map.h"
 #include "state.h"
+#include "sstream.h"
+#include "exception.h"
+#include "expr_pair.h"
 #include "smt_operator_info.h"
+#include "smt_coercion.h"
 #include "smt_frontend.h"
 #include "smt_notation.h"
 #include "smt_pp.h"
 
 namespace lean {
 namespace smt {
+static std::vector<bool> g_empty_vector;
 /** \brief Implementation of the Lean frontend */
 struct frontend::imp {
+    typedef std::pair<std::vector<bool>, name> implicit_info;
     // Remark: only named objects are stored in the dictionary.
     typedef std::unordered_map<name, operator_info, name_hash, name_eq> operator_table;
-    typedef std::unordered_map<name, unsigned, name_hash, name_eq> implicit_table;
-    typedef std::unordered_map<expr, operator_info, expr_hash, std::equal_to<expr>> expr_to_operator;
+    typedef std::unordered_map<name, implicit_info, name_hash, name_eq> implicit_table;
+    typedef std::unordered_map<expr, list<operator_info>, expr_hash, std::equal_to<expr>> expr_to_operators;
+    typedef std::unordered_map<expr_pair, expr, expr_pair_hash, expr_pair_eq> coercion_map;
+    typedef std::unordered_set<expr, expr_hash, std::equal_to<expr>> coercion_set;
+
     std::atomic<unsigned> m_num_children;
     std::shared_ptr<imp>  m_parent;
     environment           m_env;
     operator_table        m_nud; // nud table for Pratt's parser
     operator_table        m_led; // led table for Pratt's parser
-    expr_to_operator      m_expr_to_operator; // map denotations to operators (this is used for pretty printing)
+    expr_to_operators     m_expr_to_operators; // map denotations to operators (this is used for pretty printing)
     implicit_table        m_implicit_table; // track the number of implicit arguments for a symbol.
+    coercion_map          m_coercion_map; // mapping from (given_type, expected_type) -> coercion
+    coercion_set          m_coercion_set; // Set of coercions
     state                 m_state;
 
     bool has_children() const { return m_num_children > 0; }
@@ -85,41 +97,73 @@ struct frontend::imp {
     }
 
     /** \brief Find the operator that is used as notation for the given expression. */
-    operator_info find_op_for(expr const & e) const {
-        auto it = m_expr_to_operator.find(e);
-        if (it != m_expr_to_operator.end())
-            return it->second;
-        else if (has_parent())
-            return m_parent->find_op_for(e);
+    operator_info find_op_for(expr const & e, bool unicode) const {
+        auto it = m_expr_to_operators.find(e);
+        if (it != m_expr_to_operators.end()) {
+            auto l = it->second;
+            for (auto op : l) {
+                if (unicode || op.is_safe_ascii())
+                    return op;
+            }
+        }
+
+        if (has_parent())
+            return m_parent->find_op_for(e, unicode);
         else
             return operator_info();
     }
 
-    void diagnostic_msg(char const * msg) {
-        // TODO
-    }
-
-    void report_op_redefined(operator_info const & old_op, operator_info const & new_op) {
-        // TODO
-    }
-
     /** \brief Remove all internal denotations that are associated with the given operator symbol (aka notation) */
     void remove_bindings(operator_info const & op) {
-        for (expr const & d : op.get_exprs()) {
-            if (has_parent() && m_parent->find_op_for(d)) {
+        for (expr const & d : op.get_denotations()) {
+            if (has_parent() && m_parent->find_op_for(d, true)) {
                 // parent has an association for d... we must hide it.
-                insert(m_expr_to_operator, d, operator_info());
+                insert(m_expr_to_operators, d, list<operator_info>(operator_info()));
             } else {
-                m_expr_to_operator.erase(d);
+                m_expr_to_operators.erase(d);
             }
         }
+    }
+
+    /** \brief Add a new entry d -> op in the mapping m_expr_to_operators */
+    void insert_expr_to_operator_entry(expr const & d, operator_info const & op) {
+        list<operator_info> & l = m_expr_to_operators[d];
+        l = cons(op, l);
     }
 
     /** \brief Register the new operator in the tables for parsing and pretty printing. */
     void register_new_op(operator_info new_op, expr const & d, bool led) {
         new_op.add_expr(d);
         insert_op(new_op, led);
-        insert(m_expr_to_operator, d, new_op);
+        insert_expr_to_operator_entry(d, new_op);
+    }
+
+    /**
+        \brief Two operator (aka notation) denotations are compatible
+        iff one of the following holds:
+
+        1) Both do not have implicit arguments
+
+        2) Both have implicit arguments, and the implicit arguments
+        occur in the same positions.
+
+    */
+    bool compatible_denotation(expr const & d1, expr const & d2) {
+        return get_implicit_arguments(d1) == get_implicit_arguments(d2);
+    }
+
+    /**
+        \brief Return true iff the existing denotations (aka
+        overloads) for an operator op are compatible with the new
+        denotation d.
+
+        The compatibility is only an issue if implicit arguments are
+        used. If one of the denotations has implicit arguments, then
+        all of them should have implicit arguments, and the implicit
+        arguments should occur in the same positions.
+    */
+    bool compatible_denotations(operator_info const & op, expr const & d) {
+        return std::all_of(op.get_denotations().begin(), op.get_denotations().end(), [&](expr const & prev_d) { return compatible_denotation(prev_d, d); });
     }
 
     /**
@@ -139,17 +183,27 @@ struct frontend::imp {
         if (!old_op) {
             register_new_op(new_op, d, led);
         } else if (old_op == new_op) {
-            // overload
-            if (defined_here(old_op, led)) {
-                old_op.add_expr(d);
+            if (compatible_denotations(old_op, d)) {
+                // overload
+                if (defined_here(old_op, led)) {
+                    old_op.add_expr(d);
+                    insert_expr_to_operator_entry(d, old_op);
+                } else {
+                    // we must copy the operator because it was defined in
+                    // a parent frontend.
+                    new_op = old_op.copy();
+                    register_new_op(new_op, d, led);
+                }
             } else {
-                // we must copy the operator because it was defined in
-                // a parent frontend.
-                new_op = old_op.copy();
+                diagnostic(m_state) << "The denotation(s) for the existing notation:\n  " << old_op
+                                    << "\nhave been replaced with the new denotation:\n  " << d
+                                    << "\nbecause they conflict on how implicit arguments are used.\n";
+                remove_bindings(old_op);
                 register_new_op(new_op, d, led);
             }
         } else {
-            report_op_redefined(old_op, new_op);
+            diagnostic(m_state) << "Notation has been redefined, the existing notation:\n  " << old_op
+                                << "\nhas been replaced with:\n  " << new_op << "\nbecause they conflict with each other.\n";
             remove_bindings(old_op);
             register_new_op(new_op, d, led);
         }
@@ -164,6 +218,123 @@ struct frontend::imp {
     void add_mixfixl(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixl(sz, opns, p), d, false); }
     void add_mixfixr(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixr(sz, opns, p), d, true);  }
     void add_mixfixc(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixc(sz, opns, p), d, false); }
+    void add_mixfixo(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixo(sz, opns, p), d, true); }
+
+    expr mk_explicit_definition_body(expr type, name const & n, unsigned i, unsigned sz) {
+        if (i == sz) {
+            buffer<expr> args;
+            args.push_back(mk_constant(n));
+            unsigned j = sz;
+            while (j > 0) { --j; args.push_back(mk_var(j)); }
+            return mk_app(args.size(), args.data());
+        } else {
+            lean_assert(is_pi(type));
+            return mk_lambda(abst_name(type), abst_domain(type), mk_explicit_definition_body(abst_body(type), n, i+1, sz));
+        }
+    }
+
+    void mark_implicit_arguments(name const & n, unsigned sz, bool const * implicit) {
+        if (has_children())
+            throw exception(sstream() << "failed to mark implicit arguments, frontend object is read-only");
+        object const & obj = m_env.get_object(n);
+        if (obj.kind() != object_kind::Definition && obj.kind() != object_kind::Postulate)
+            throw exception(sstream() << "failed to mark implicit arguments, the object '" << n << "' is not a definition or postulate");
+        if (has_implicit_arguments(n))
+            throw exception(sstream() << "the object '" << n << "' already has implicit argument information associated with it");
+        name explicit_version(n, "explicit");
+        if (m_env.find_object(explicit_version))
+            throw exception(sstream() << "failed to mark implicit arguments for '" << n << "', the frontend already has an object named '" << explicit_version << "'");
+        expr const & type = obj.get_type();
+        unsigned num_args = 0;
+        expr it = type;
+        while (is_pi(it)) { num_args++; it = abst_body(it); }
+        if (sz > num_args)
+            throw exception(sstream() << "failed to mark implicit arguments for '" << n << "', object has only " << num_args << " arguments, but trying to mark " << sz << " arguments");
+        std::vector<bool> v(implicit, implicit+sz);
+        m_implicit_table[n] = mk_pair(v, explicit_version);
+        expr body = mk_explicit_definition_body(type, n, 0, sz);
+        if (obj.is_axiom() || obj.is_theorem()) {
+            m_env.add_theorem(explicit_version, type, body);
+        } else {
+            m_env.add_definition(explicit_version, type, body);
+        }
+    }
+
+    bool has_implicit_arguments(name const & n) {
+        if (m_implicit_table.find(n) != m_implicit_table.end()) {
+            return true;
+        } else if (has_parent()) {
+            return m_parent->has_implicit_arguments(n);
+        } else {
+            return false;
+        }
+    }
+
+    std::vector<bool> const & get_implicit_arguments(name const & n) {
+        auto it = m_implicit_table.find(n);
+        if (it != m_implicit_table.end()) {
+            return it->second.first;
+        } else if (has_parent()) {
+            return m_parent->get_implicit_arguments(n);
+        } else {
+            return g_empty_vector;
+        }
+    }
+
+    std::vector<bool> const & get_implicit_arguments(expr const & n) {
+        if (is_constant(n))
+            return get_implicit_arguments(const_name(n));
+        else
+            return g_empty_vector;
+    }
+
+    name const & get_explicit_version(name const & n) {
+        auto it = m_implicit_table.find(n);
+        if (it != m_implicit_table.end()) {
+            return it->second.second;
+        } else if (has_parent()) {
+            return m_parent->get_explicit_version(n);
+        } else {
+            return name::anonymous();
+        }
+    }
+
+    void add_coercion(expr const & f) {
+        expr type      = m_env.infer_type(f);
+        expr norm_type = m_env.normalize(type);
+        if (!is_arrow(norm_type))
+            throw exception("invalid coercion declaration, a coercion must have an arrow type (i.e., a non-dependent functional type)");
+        expr from      = abst_domain(norm_type);
+        expr to        = abst_body(norm_type);
+        if (from == to)
+            throw exception("invalid coercion declaration, 'from' and 'to' types are the same");
+        if (get_coercion_core(from, to))
+            throw exception("invalid coercion declaration, frontend already has a coercion for the given types");
+        m_coercion_map[expr_pair(from, to)] = f;
+        m_coercion_set.insert(f);
+        m_env.add_neutral_object(new coercion_declaration(f));
+    }
+
+    expr get_coercion_core(expr const & given_type, expr const & expected_type) {
+        expr_pair p(given_type, expected_type);
+        auto it = m_coercion_map.find(p);
+        if (it != m_coercion_map.end())
+            return it->second;
+        else if (has_parent())
+            return m_parent->get_coercion_core(given_type, expected_type);
+        else
+            return expr();
+    }
+
+    expr get_coercion(expr const & given_type, expr const & expected_type) {
+        expr norm_given_type    = m_env.normalize(given_type);
+        expr norm_expected_type = m_env.normalize(expected_type);
+        return get_coercion_core(norm_given_type, norm_expected_type);
+    }
+
+    bool is_coercion(expr const & f) {
+        return m_coercion_set.find(f) != m_coercion_set.end();
+    }
 
     void set_interrupt(bool flag) {
         m_env.set_interrupt(flag);
@@ -189,12 +360,12 @@ struct frontend::imp {
 };
 
 frontend::frontend():m_imp(new imp(*this)) {
-    init_builtin_notation(*this);
     init_toplevel(m_imp->m_env);
-    m_imp->m_state.set_formatter(mk_pp_formatter(*this));
+    init_builtin_notation(*this);
+    m_imp->m_state.set_formatter(lean::smt::mk_pp_formatter(*this));
 }
 frontend::frontend(imp * new_ptr):m_imp(new_ptr) {
-    m_imp->m_state.set_formatter(mk_pp_formatter(*this));
+    m_imp->m_state.set_formatter(::lean::smt::mk_pp_formatter(*this));
 }
 frontend::frontend(std::shared_ptr<imp> const & ptr):m_imp(ptr) {}
 frontend::~frontend() {}
@@ -233,9 +404,20 @@ void frontend::add_postfix(name const & opn, unsigned p, expr const & d) { m_imp
 void frontend::add_mixfixl(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixl(sz, opns, p, d); }
 void frontend::add_mixfixr(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixr(sz, opns, p, d); }
 void frontend::add_mixfixc(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixc(sz, opns, p, d); }
-operator_info frontend::find_op_for(expr const & n) const { return m_imp->find_op_for(n); }
+void frontend::add_mixfixo(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixo(sz, opns, p, d); }
+operator_info frontend::find_op_for(expr const & n, bool unicode) const { return m_imp->find_op_for(n, unicode); }
 operator_info frontend::find_nud(name const & n) const { return m_imp->find_nud(n); }
 operator_info frontend::find_led(name const & n) const { return m_imp->find_led(n); }
+
+void frontend::mark_implicit_arguments(name const & n, unsigned sz, bool const * implicit) { m_imp->mark_implicit_arguments(n, sz, implicit); }
+void frontend::mark_implicit_arguments(name const & n, std::initializer_list<bool> const & l) { mark_implicit_arguments(n, l.size(), l.begin()); }
+bool frontend::has_implicit_arguments(name const & n) const { return m_imp->has_implicit_arguments(n); }
+std::vector<bool> const & frontend::get_implicit_arguments(name const & n) const { return m_imp->get_implicit_arguments(n); }
+name const & frontend::get_explicit_version(name const & n) const { return m_imp->get_explicit_version(n); }
+
+void frontend::add_coercion(expr const & f) { m_imp->add_coercion(f); }
+expr frontend::get_coercion(expr const & given_type, expr const & expected_type) const { return m_imp->get_coercion(given_type, expected_type); }
+bool frontend::is_coercion(expr const & f) const { return m_imp->is_coercion(f); }
 
 state const & frontend::get_state() const { return m_imp->m_state; }
 state & frontend::get_state_core() { return m_imp->m_state; }

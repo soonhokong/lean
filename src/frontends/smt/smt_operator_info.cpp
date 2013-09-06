@@ -56,7 +56,7 @@ void operator_info::add_expr(expr const & d) { lean_assert(m_ptr); m_ptr->m_expr
 
 bool operator_info::is_overloaded() const { return m_ptr && !is_nil(m_ptr->m_exprs) && !is_nil(cdr(m_ptr->m_exprs)); }
 
-list<expr> const & operator_info::get_exprs() const { lean_assert(m_ptr); return m_ptr->m_exprs; }
+list<expr> const & operator_info::get_denotations() const { lean_assert(m_ptr); return m_ptr->m_exprs; }
 
 fixity operator_info::get_fixity() const { lean_assert(m_ptr); return m_ptr->m_fixity; }
 
@@ -65,6 +65,11 @@ unsigned operator_info::get_precedence() const { lean_assert(m_ptr); return m_pt
 name const & operator_info::get_op_name() const { lean_assert(m_ptr); return car(m_ptr->m_op_parts); }
 
 list<name> const & operator_info::get_op_name_parts() const { lean_assert(m_ptr); return m_ptr->m_op_parts; }
+
+bool operator_info::is_safe_ascii() const {
+    auto l = get_op_name_parts();
+    return std::all_of(l.begin(), l.end(), [](name const & p) { return p.is_safe_ascii(); });
+}
 
 operator_info operator_info::copy() const { return operator_info(new imp(*m_ptr)); }
 
@@ -101,6 +106,9 @@ operator_info mixfixr(unsigned num_parts, name const * parts, unsigned precedenc
 operator_info mixfixc(unsigned num_parts, name const * parts, unsigned precedence) {
     lean_assert(num_parts > 1); return operator_info(new operator_info::imp(num_parts, parts, fixity::Mixfixc, precedence));
 }
+operator_info mixfixo(unsigned num_parts, name const * parts, unsigned precedence) {
+    lean_assert(num_parts > 1); return operator_info(new operator_info::imp(num_parts, parts, fixity::Mixfixo, precedence));
+}
 
 char const * to_string(fixity f) {
     switch (f) {
@@ -112,6 +120,7 @@ char const * to_string(fixity f) {
     case fixity::Mixfixl: return "Mixfixl";
     case fixity::Mixfixr: return "Mixfixr";
     case fixity::Mixfixc: return "Mixfixc";
+    case fixity::Mixfixo: return "Mixfixo";
     }
     lean_unreachable();
     return 0;
@@ -119,12 +128,56 @@ char const * to_string(fixity f) {
 
 format pp(operator_info const & o) {
     format r;
-    r = highlight_command(format(to_string(o.get_fixity())));
-    if (o.get_precedence() != 0)
-        r += format{space(), format(o.get_precedence())};
-    for (auto p : o.get_op_name_parts())
-        r += format{space(), format(p)};
-    return r;
+    switch (o.get_fixity()) {
+    case fixity::Infix:
+    case fixity::Infixl:
+    case fixity::Infixr:
+        r = highlight_command(format(to_string(o.get_fixity())));
+        if (o.get_precedence() > 1)
+            r += format{space(), format(o.get_precedence())};
+        r += format{space(), format(o.get_op_name())};
+        return r;
+    case fixity::Prefix:
+    case fixity::Postfix:
+    case fixity::Mixfixl:
+    case fixity::Mixfixr:
+    case fixity::Mixfixc:
+    case fixity::Mixfixo:
+        r = highlight_command(format("Notation"));
+        if (o.get_precedence() > 1)
+            r += format{space(), format(o.get_precedence())};
+        switch (o.get_fixity()) {
+        case fixity::Prefix:
+            r += format{space(), format(o.get_op_name()), space(), format("_")};
+            return r;
+        case fixity::Postfix:
+            r += format{space(), format("_"), space(), format(o.get_op_name())};
+            return r;
+        case fixity::Mixfixl:
+            for (auto p : o.get_op_name_parts())
+                r += format{space(), format(p), space(), format("_")};
+            return r;
+        case fixity::Mixfixr:
+            for (auto p : o.get_op_name_parts())
+                r += format{space(), format("_"), space(), format(p)};
+            return r;
+        case fixity::Mixfixc: {
+            auto parts = o.get_op_name_parts();
+            r += format{space(), format(head(parts))};
+            for (auto p : tail(parts))
+                r += format{space(), format("_"), space(), format(p)};
+            return r;
+        }
+        case fixity::Mixfixo:
+            for (auto p : o.get_op_name_parts())
+                r += format{space(), format("_"), space(), format(p)};
+            r += format{space(), format("_")};
+            return r;
+        default: lean_unreachable(); break;
+        }
+    }
+    lean_unreachable();
+    return format();
 }
 
 char const * notation_declaration::keyword() const {

@@ -23,8 +23,9 @@ namespace smt {
    Mixfixl: ID _ ID _ ... ID _       (has at least two parts)
    Mixfixr: _ ID _ ID ... _ ID       (has at least two parts)
    Mixfixc: ID _ ID _ ... ID _ ID    (has at least two parts)
+   Mixfixo:  _ ID _ ... ID _         (has at least two parts)
 */
-enum class fixity { Prefix, Infix, Infixl, Infixr, Postfix, Mixfixl, Mixfixr, Mixfixc };
+enum class fixity { Prefix, Infix, Infixl, Infixr, Postfix, Mixfixl, Mixfixr, Mixfixc, Mixfixo };
 
 /**
    \brief Data-structure for storing user defined operator
@@ -48,14 +49,15 @@ public:
 
     operator bool() const { return m_ptr != nullptr; }
 
-    friend operator_info infix(::lean::name const & op, unsigned precedence);
-    friend operator_info infixl(::lean::name const & op, unsigned precedence);
-    friend operator_info infixr(::lean::name const & op, unsigned precedence);
-    friend operator_info prefix(::lean::name const & op, unsigned precedence);
-    friend operator_info postfix(::lean::name const & op, unsigned precedence);
-    friend operator_info mixfixl(unsigned num_parts, ::lean::name const * parts, unsigned precedence);
-    friend operator_info mixfixr(unsigned num_parts, ::lean::name const * parts, unsigned precedence);
-    friend operator_info mixfixc(unsigned num_parts, ::lean::name const * parts, unsigned precedence);
+    friend operator_info infix(name const & op, unsigned precedence);
+    friend operator_info infixl(name const & op, unsigned precedence);
+    friend operator_info infixr(name const & op, unsigned precedence);
+    friend operator_info prefix(name const & op, unsigned precedence);
+    friend operator_info postfix(name const & op, unsigned precedence);
+    friend operator_info mixfixl(unsigned num_parts, name const * parts, unsigned precedence);
+    friend operator_info mixfixr(unsigned num_parts, name const * parts, unsigned precedence);
+    friend operator_info mixfixc(unsigned num_parts, name const * parts, unsigned precedence);
+    friend operator_info mixfixo(unsigned num_parts, name const * parts, unsigned precedence);
 
     /** \brief Associate a denotation (expression) with this operator. */
     void add_expr(expr const & n);
@@ -64,12 +66,12 @@ public:
     bool is_overloaded() const;
 
     /**
-       \brief Return the list of expressions for this operator.
+       \brief Return the list of denotations for this operator.
        The list has size greater than 1 iff the operator has been
        overloaded.
        These are the possible interpretations for the operator.
     */
-    list<expr> const & get_exprs() const;
+    list<expr> const & get_denotations() const;
 
     /** \brief Return the operator fixity. */
     fixity get_fixity() const;
@@ -82,6 +84,9 @@ public:
 
     /** \brief Return the operators parts. */
     list<name> const & get_op_name_parts() const;
+
+    /** \brief Return true if all parts of the operator use only safe ASCII characters */
+    bool is_safe_ascii() const;
 
     /** \brief Return a copy of the operator. */
     operator_info copy() const;
@@ -97,9 +102,11 @@ operator_info postfix(name const & op, unsigned precedence);
 operator_info mixfixl(unsigned num_parts, name const * parts, unsigned precedence);
 operator_info mixfixr(unsigned num_parts, name const * parts, unsigned precedence);
 operator_info mixfixc(unsigned num_parts, name const * parts, unsigned precedence);
-inline operator_info mixfixl(std::initializer_list<name> const & l, unsigned precedence) { return smt::mixfixl(l.size(), l.begin(), precedence); }
-inline operator_info mixfixr(std::initializer_list<name> const & l, unsigned precedence) { return smt::mixfixr(l.size(), l.begin(), precedence); }
-inline operator_info mixfixc(std::initializer_list<name> const & l, unsigned precedence) { return smt::mixfixc(l.size(), l.begin(), precedence); }
+operator_info mixfixo(unsigned num_parts, name const * parts, unsigned precedence);
+inline operator_info mixfixl(std::initializer_list<name> const & l, unsigned precedence) { return mixfixl(l.size(), l.begin(), precedence); }
+inline operator_info mixfixr(std::initializer_list<name> const & l, unsigned precedence) { return mixfixr(l.size(), l.begin(), precedence); }
+inline operator_info mixfixc(std::initializer_list<name> const & l, unsigned precedence) { return mixfixc(l.size(), l.begin(), precedence); }
+inline operator_info mixfixo(std::initializer_list<name> const & l, unsigned precedence) { return mixfixo(l.size(), l.begin(), precedence); }
 
 format pp(operator_info const & o);
 std::ostream & operator<<(std::ostream & out, operator_info const & o);

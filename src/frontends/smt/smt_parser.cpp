@@ -8,8 +8,8 @@ Author: Soonho Kong
 #include <unordered_map>
 #include "scoped_map.h"
 #include "exception.h"
-#include "normalize.h"
-#include "type_check.h"
+#include "normalizer.h"
+#include "type_checker.h"
 #include "free_vars.h"
 #include "builtin.h"
 #include "arith.h"
@@ -19,12 +19,16 @@ Author: Soonho Kong
 #include "expr_maps.h"
 #include "sstream.h"
 #include "kernel_exception.h"
-#include "elaborator.h"
+#include "metavar.h"
+
 #include "smt_frontend.h"
+#include "smt_elaborator.h"
+#include "smt_elaborator_exception.h"
 #include "smt_parser.h"
 #include "smt_scanner.h"
 #include "smt_notation.h"
 #include "smt_pp.h"
+
 #ifdef LEAN_USE_READLINE
 #include <stdlib.h>
 #include <stdio.h>

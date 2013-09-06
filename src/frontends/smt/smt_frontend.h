@@ -86,6 +86,11 @@ public:
     void add_mixfixl(unsigned sz, name const * opns, unsigned precedence, expr const & d);
     void add_mixfixr(unsigned sz, name const * opns, unsigned precedence, expr const & d);
     void add_mixfixc(unsigned sz, name const * opns, unsigned precedence, expr const & d);
+    void add_mixfixo(unsigned sz, name const * opns, unsigned precedence, expr const & d);
+    void add_mixfixl(std::initializer_list<name> const & l, unsigned p, expr const & d) { add_mixfixl(l.size(), l.begin(), p, d); }
+    void add_mixfixr(std::initializer_list<name> const & l, unsigned p, expr const & d) { add_mixfixr(l.size(), l.begin(), p, d); }
+    void add_mixfixc(std::initializer_list<name> const & l, unsigned p, expr const & d) { add_mixfixc(l.size(), l.begin(), p, d); }
+    void add_mixfixo(std::initializer_list<name> const & l, unsigned p, expr const & d) { add_mixfixo(l.size(), l.begin(), p, d); }
     /**
         \brief Return the operator (if one exists) associated with the
         given expression.
@@ -94,8 +99,11 @@ public:
         return the null operator.
 
         \remark This is used for pretty printing.
+
+        \remark If unicode is false, then only operators containing
+        safe ASCII chars are considered.
     */
-    operator_info find_op_for(expr const & e) const;
+    operator_info find_op_for(expr const & e, bool unicode) const;
     /**
        \brief Return the operator (if one exists) that can appear at
        the beginning of a language construct.
@@ -116,6 +124,58 @@ public:
         \remark This is used for parsing.
     */
     operator_info find_led(name const & n) const;
+    /*@}*/
+
+    /**
+       @name Implicit arguments.
+    */
+    /**
+       \brief Mark the given arguments of \c n as implicit.
+       The bit-vector array specify the position of the implicit arguments.
+    */
+    void mark_implicit_arguments(name const & n, unsigned sz, bool const * mask);
+    void mark_implicit_arguments(name const & n, std::initializer_list<bool> const & l);
+    void mark_implicit_arguments(expr const & n, std::initializer_list<bool> const & l) { mark_implicit_arguments(const_name(n), l); }
+    /** \brief Return true iff \c n has implicit arguments */
+    bool has_implicit_arguments(name const & n) const;
+    /** \brief Return the position of the arguments that are implicit. */
+    std::vector<bool> const & get_implicit_arguments(name const & n) const;
+    /**
+        \brief This frontend associates an definition with each
+        definition (or postulate) that has implicit arguments. The
+        additional definition has explicit arguments, and it is called
+        n::explicit. The explicit version can be used when the Lean
+        frontend can't figure out the value for the implicit
+        arguments.
+    */
+    name const & get_explicit_version(name const & n) const;
+    /*@}*/
+
+    /**
+       @name Coercions
+
+       We support a very basic form of coercion. It is an expression
+       with type T1 -> T2. This expression can be used to convert
+       an expression of type T1 into an expression of type T2 whenever
+       T2 is expected, but T1 was provided.
+    */
+    /**
+       \brief Add a new coercion to the frontend.
+       It throws an exception if f does not have type T1 -> T2, or if there is already a
+       coercion from T1 to T2.
+    */
+    void add_coercion(expr const & f);
+    /**
+        \brief Return a coercion from given_type to expected_type if it exists.
+        Return the null expression if there is no coercion from \c given_type to
+        \c expected_type.
+    */
+    expr get_coercion(expr const & given_type, expr const & expected_type) const;
+    /**
+       \brief Return true iff the given expression is a coercion. That is, it was added using
+       \c add_coercion.
+    */
+    bool is_coercion(expr const & f) const;
     /*@}*/
 
     /**

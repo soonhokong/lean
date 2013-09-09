@@ -383,10 +383,8 @@ class parser::imp {
     }
 
     expr parse_dec() {
-        //auto p = pos();
-        expr r; // = save(mk_float_value(m_scanner.get_num_val()), p);
-        /* TODO */
-        not_implemented_yet();
+        auto p = pos();
+        expr r = save(mk_real_value(m_scanner.get_num_val()), p);
         next();
         return r;
     }
@@ -399,16 +397,6 @@ class parser::imp {
     [[ noreturn ]] void not_implemented_yet() {
         // TODO
         throw parser_error("not implemented yet", pos());
-    }
-
-    expr elaborate(expr const & e) {
-        // if (has_metavar(e)) {
-        //     // TODO fix
-        //     m_elaborator.display(std::cerr);
-        //     throw parser_error("expression contains metavariables... not implemented yet.", m_last_cmd_pos);
-        // } else {
-            return e;
-        // }
     }
 
     /** \brief Register the name \c n as a local declaration. */
@@ -441,7 +429,6 @@ class parser::imp {
         unsigned i = bindings.size();
         while (i > 0) {
             --i;
-            /* TODO */
             auto p = std::get<0>(bindings[i]);
             r = save(mk_let(std::get<1>(bindings[i]),
                             std::get<2>(bindings[i]),

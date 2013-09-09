@@ -179,8 +179,8 @@ class elaborator::imp {
         auto p = lookup_ext(c, i);
         context_entry const & def = p.first;
         context const & def_c     = p.second;
-        lean_assert(length(c) > length(def_c));
-        return lift_free_vars_mmv(def.get_domain(), 0, length(c) - length(def_c));
+        lean_assert(c.size() > def_c.size());
+        return lift_free_vars_mmv(def.get_domain(), 0, c.size() - def_c.size());
     }
 
     expr check_pi(expr const & e, context const & ctx, expr const & s, context const & s_ctx) {
@@ -197,12 +197,26 @@ class elaborator::imp {
                     context_entry const & entry = p.first;
                     context const & entry_ctx   = p.second;
                     if (entry.get_body()) {
-                        return lift_free_vars_mmv(check_pi(entry.get_body(), entry_ctx, s, s_ctx), 0, length(ctx) - length(entry_ctx));
+                        return lift_free_vars_mmv(check_pi(entry.get_body(), entry_ctx, s, s_ctx), 0, ctx.size() - entry_ctx.size());
                     }
                 } catch (exception&) {
                     // this can happen if we access a variable out of scope
                     throw function_expected_exception(m_env, s_ctx, s);
                 }
+            } else if (has_assigned_metavar(e)) {
+                return check_pi(instantiate(e), ctx, s, s_ctx);
+            } else if (is_metavar(e)) {
+                // e is a unassigned metavariable that must be a Pi,
+                // then we can assign it to (Pi x : A, B x), where
+                // A and B are fresh metavariables
+                unsigned midx = metavar_idx(e);
+                expr A = mk_metavar(ctx);
+                name x("x");
+                context ctx2 = extend(ctx, x, A);
+                expr B = mk_metavar(ctx2);
+                expr type = mk_pi(x, A, B(Var(0)));
+                m_metavars[midx].m_assignment = type;
+                return type;
             }
             throw function_expected_exception(m_env, s_ctx, s);
         }
@@ -233,6 +247,8 @@ class elaborator::imp {
                     // this can happen if we access a variable out of scope
                     throw type_expected_exception(m_env, s_ctx, s);
                 }
+            } else if (has_assigned_metavar(e)) {
+                return check_universe(instantiate(e), ctx, s, s_ctx);
             }
             throw type_expected_exception(m_env, s_ctx, s);
         }
@@ -263,7 +279,7 @@ class elaborator::imp {
                     if (!has_metavar(expected) && !has_metavar(given)) {
                         if (is_convertible(expected, given, ctx)) {
                             // compatible
-                        } else if (m_frontend.get_coercion(given, expected)) {
+                        } else if (m_frontend.get_coercion(given, expected, ctx)) {
                             // compatible if using coercion
                             num_coercions++;
                         } else {
@@ -382,7 +398,7 @@ class elaborator::imp {
                         m_constraints.push_back(constraint(expected, given, ctx, r));
                     } else {
                         if (!is_convertible(expected, given, ctx)) {
-                            expr coercion = m_frontend.get_coercion(given, expected);
+                            expr coercion = m_frontend.get_coercion(given, expected, ctx);
                             if (coercion) {
                                 modified = true;
                                 args[i] = mk_app(coercion, args[i]);
@@ -438,7 +454,7 @@ class elaborator::imp {
                     m_constraints.push_back(constraint(expected, given, ctx, r));
                 } else {
                     if (!is_convertible(expected, given, ctx)) {
-                        expr coercion = m_frontend.get_coercion(given, expected);
+                        expr coercion = m_frontend.get_coercion(given, expected, ctx);
                         if (coercion) {
                             v_p.first = mk_app(coercion, v_p.first);
                         } else {
@@ -448,7 +464,7 @@ class elaborator::imp {
                 }
             }
             auto b_p = process(let_body(e), extend(ctx, let_name(e), t_p.first ? t_p.first : v_p.second, v_p.first));
-            expr t   = lower_free_vars_mmv(b_p.second, 1, 1);
+            expr t   = instantiate_free_var_mmv(b_p.second, 0, v_p.first);
             expr new_e = update_let(e, t_p.first, v_p.first, b_p.first);
             add_trace(e, new_e);
             return expr_pair(new_e, t);
@@ -462,7 +478,7 @@ class elaborator::imp {
     }
 
     bool is_simple_ho_match(expr const & e1, expr const & e2, context const & ctx) {
-        if (is_app(e1) && is_meta(arg(e1,0)) && is_var(arg(e1,1), 0) && num_args(e1) == 2 && length(ctx) > 0) {
+        if (is_app(e1) && is_meta(arg(e1,0)) && is_var(arg(e1,1), 0) && num_args(e1) == 2 && !is_empty(ctx)) {
             return true;
         } else {
             return false;
@@ -471,7 +487,10 @@ class elaborator::imp {
 
     void unify_simple_ho_match(expr const & e1, expr const & e2, constraint const & c) {
         context const & ctx = c.m_ctx;
-        m_constraints.push_back(constraint(arg(e1,0), mk_lambda(car(ctx).get_name(), car(ctx).get_domain(), e2), c));
+        context_entry const & head = ::lean::lookup(ctx, 0);
+        m_constraints.push_back(constraint(arg(e1,0), mk_lambda(head.get_name(),
+                                                           lift_free_vars_mmv(head.get_domain(), 1, 1),
+                                                           lift_free_vars_mmv(e2, 1, 1)), c));
     }
 
     struct cycle_detected {};
@@ -734,16 +753,16 @@ class elaborator::imp {
                             try {
                                 expr t = infer(m_metavars[midx].m_assignment, ctx);
                                 m_metavars[midx].m_type_cnstr = true;
-                                info_ref r = mk_expected_type_info(m_metavars[midx].m_mvar, m_metavars[midx].m_mvar,
+                                info_ref r = mk_expected_type_info(m_metavars[midx].m_mvar, m_metavars[midx].m_assignment,
                                                                    m_metavars[midx].m_type, t, ctx);
                                 m_constraints.push_back(constraint(m_metavars[midx].m_type, t, ctx, r));
                                 progress = true;
                             } catch (exception&) {
                                 // std::cout << "Failed to infer type of: ?M" << midx << "\n"
-                                //          << m_metavars[midx].m_assignment << "\nAT\n" << m_metavars[midx].m_ctx << "\n";
+                                //           << m_metavars[midx].m_assignment << "\nAT\n" << m_metavars[midx].m_ctx << "\n";
                                 expr null_given_type; // failed to infer given type.
-                                throw unification_type_mismatch_exception(*m_owner, ctx, m_metavars[midx].m_mvar, m_metavars[midx].m_mvar,
-                                                                          m_metavars[midx].m_type, null_given_type);
+                                throw unification_type_mismatch_exception(*m_owner, ctx, m_metavars[midx].m_mvar, m_metavars[midx].m_assignment,
+                                                                          instantiate(m_metavars[midx].m_type), null_given_type);
                             }
                         }
                     }

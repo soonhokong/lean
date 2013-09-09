@@ -875,7 +875,11 @@ class parser::imp {
                 while (i > 0) {
                     --i;
                     auto p = std::get<0>(bindings[i]);
-                    r = save(mk_let(std::get<1>(bindings[i]), std::get<2>(bindings[i]), std::get<3>(bindings[i]), r), p);
+                    r = save(mk_let(std::get<1>(bindings[i]),
+                                    std::get<2>(bindings[i]),
+                                    std::get<3>(bindings[i]),
+                                    r),
+                             p);
                 }
                 return r;
             } else {

@@ -20,11 +20,11 @@ Author: Leonardo de Moura
 #include "interruptable_ptr.h"
 #include "metavar.h"
 #include "exception.h"
-#include "lean_notation.h"
-#include "lean_pp.h"
-#include "lean_frontend.h"
-#include "lean_coercion.h"
-#include "lean_elaborator.h"
+#include "smt_notation.h"
+#include "smt_pp.h"
+#include "smt_frontend.h"
+#include "smt_coercion.h"
+#include "smt_elaborator.h"
 
 #ifndef SMT_DEFAULT_PP_MAX_DEPTH
 #define SMT_DEFAULT_PP_MAX_DEPTH std::numeric_limits<unsigned>::max()
@@ -1182,7 +1182,7 @@ class pp_formatter_cell : public formatter_cell {
         notation_declaration const & n = *static_cast<notation_declaration const *>(obj.cell());
         expr const & d = n.get_expr();
         format d_fmt   = is_constant(d) ? format(const_name(d)) : pp(d, opts);
-        return format{::lean::pp(n.get_op()), space(), colon(), space(), d_fmt};
+        return format{::lean::smt::pp(n.get_op()), space(), colon(), space(), d_fmt};
     }
 
     format pp_coercion_decl(object const & obj, options const & opts) {

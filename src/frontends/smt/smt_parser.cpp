@@ -12,15 +12,15 @@ Author: Soonho Kong
 #include "type_checker.h"
 #include "free_vars.h"
 #include "builtin.h"
-#include "arith.h"
+#include "arithlibs.h"
 #include "printer.h"
 #include "state.h"
 #include "option_declarations.h"
 #include "expr_maps.h"
 #include "sstream.h"
 #include "kernel_exception.h"
+#include "kernel_exception_formatter.h"
 #include "metavar.h"
-
 #include "smt_frontend.h"
 #include "smt_elaborator.h"
 #include "smt_elaborator_exception.h"
@@ -28,7 +28,6 @@ Author: Soonho Kong
 #include "smt_scanner.h"
 #include "smt_notation.h"
 #include "smt_pp.h"
-
 #ifdef LEAN_USE_READLINE
 #include <stdlib.h>
 #include <stdio.h>
@@ -429,7 +428,7 @@ class parser::imp {
         check_lparen_next("'(' expected in parse_let");
 
         // Process variable bindings
-        bindings_buffer bindings;
+        buffer<std::tuple<pos_info, name, expr, expr>> bindings;
         do {
             std::tuple<pos_info, name, expr, expr> binding = parse_var_binding();
             register_binding(std::get<1>(binding));
@@ -442,6 +441,7 @@ class parser::imp {
         unsigned i = bindings.size();
         while (i > 0) {
             --i;
+            /* TODO */
             auto p = std::get<0>(bindings[i]);
             r = save(mk_let(std::get<1>(bindings[i]),
                             std::get<2>(bindings[i]),

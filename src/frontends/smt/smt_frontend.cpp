@@ -8,7 +8,7 @@ Author: Leonardo de Moura
 #include <atomic>
 #include <unordered_set>
 #include "environment.h"
-#include "toplevel.h"
+#include "import_all.h"
 #include "map.h"
 #include "state.h"
 #include "sstream.h"
@@ -326,9 +326,9 @@ struct frontend::imp {
             return expr();
     }
 
-    expr get_coercion(expr const & given_type, expr const & expected_type) {
-        expr norm_given_type    = m_env.normalize(given_type);
-        expr norm_expected_type = m_env.normalize(expected_type);
+    expr get_coercion(expr const & given_type, expr const & expected_type, context const & ctx) {
+        expr norm_given_type    = m_env.normalize(given_type, ctx);
+        expr norm_expected_type = m_env.normalize(expected_type, ctx);
         return get_coercion_core(norm_given_type, norm_expected_type);
     }
 
@@ -360,12 +360,12 @@ struct frontend::imp {
 };
 
 frontend::frontend():m_imp(new imp(*this)) {
-    init_toplevel(m_imp->m_env);
+    import_all(m_imp->m_env);
     init_builtin_notation(*this);
-    m_imp->m_state.set_formatter(lean::smt::mk_pp_formatter(*this));
+    m_imp->m_state.set_formatter(mk_pp_formatter(*this));
 }
 frontend::frontend(imp * new_ptr):m_imp(new_ptr) {
-    m_imp->m_state.set_formatter(::lean::smt::mk_pp_formatter(*this));
+    m_imp->m_state.set_formatter(mk_pp_formatter(*this));
 }
 frontend::frontend(std::shared_ptr<imp> const & ptr):m_imp(ptr) {}
 frontend::~frontend() {}
@@ -416,7 +416,9 @@ std::vector<bool> const & frontend::get_implicit_arguments(name const & n) const
 name const & frontend::get_explicit_version(name const & n) const { return m_imp->get_explicit_version(n); }
 
 void frontend::add_coercion(expr const & f) { m_imp->add_coercion(f); }
-expr frontend::get_coercion(expr const & given_type, expr const & expected_type) const { return m_imp->get_coercion(given_type, expected_type); }
+expr frontend::get_coercion(expr const & given_type, expr const & expected_type, context const & ctx) const {
+    return m_imp->get_coercion(given_type, expected_type, ctx);
+}
 bool frontend::is_coercion(expr const & f) const { return m_imp->is_coercion(f); }
 
 state const & frontend::get_state() const { return m_imp->m_state; }

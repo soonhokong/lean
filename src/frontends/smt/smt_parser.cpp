@@ -174,6 +174,7 @@ class parser::imp {
     typedef std::unordered_map<name, expr, name_hash, name_eq>  builtins;
     typedef std::pair<unsigned, unsigned> pos_info;
     typedef expr_map<pos_info> expr_pos_info;
+    typedef buffer<std::tuple<pos_info, name, expr, bool>> bindings_buffer;
     frontend       m_frontend;
     scanner        m_scanner;
     elaborator     m_elaborator;
@@ -183,8 +184,6 @@ class parser::imp {
     bool           m_found_errors;
     local_decls    m_local_decls;
     unsigned       m_num_local_decls;
-    context        m_context;
-    builtins       m_builtins;
     expr_pos_info  m_expr_pos_info;
     pos_info       m_last_cmd_pos;
     // Reference to temporary parser used to process import command.
@@ -212,6 +211,7 @@ class parser::imp {
         parser_error(sstream const & msg, pos_info const & p):exception(msg), m_pos(p) {}
     };
 
+
     /**
         \brief Auxiliar struct for creating/destroying a new scope for
         local declarations.
@@ -220,16 +220,13 @@ class parser::imp {
         imp &                 m_fn;
         local_decls::mk_scope m_scope;
         unsigned              m_old_num_local_decls;
-        context               m_old_context;
         mk_scope(imp & fn):
             m_fn(fn),
             m_scope(fn.m_local_decls),
-            m_old_num_local_decls(fn.m_num_local_decls),
-            m_old_context(fn.m_context) {
+            m_old_num_local_decls(fn.m_num_local_decls) {
         }
         ~mk_scope() {
             m_fn.m_num_local_decls = m_old_num_local_decls;
-            m_fn.m_context = m_old_context;
         }
     };
 
@@ -351,28 +348,18 @@ class parser::imp {
     expr get_name_ref(name const & id, pos_info const & p) {
         object const & obj = m_frontend.find_object(id);
         if (obj) {
-            object_kind k      = obj.kind();
-            if (k == object_kind::Definition || k == object_kind::Postulate)
+            object_kind k = obj.kind();
+            if (k == object_kind::Definition || k == object_kind::Postulate) {
                 return mk_constant(obj.get_name());
-            else
-                throw parser_error(sstream() << "invalid object reference, object '" << id << "' is not an expression.", p);
-        }
-        else {
-            auto it = m_builtins.find(id);
-            if (it != m_builtins.end()) {
-                return it->second;
+            } if (k == object_kind::Builtin) {
+                return obj.get_value();
             } else {
-                throw parser_error(sstream() << "unknown identifier '" << id << "'", p);
+                throw parser_error(sstream() << "invalid object reference, object '" << id << "' is not an expression.", p);
             }
         }
-    }
-
-    /** \brief Initialize \c m_builtins table with Lean builtin symbols that do not have notation associated with them. */
-    void init_builtins() {
-        m_builtins["Bool"]   = Bool;
-        m_builtins["true"]   = True;
-        m_builtins["false"]  = False;
-        m_builtins["Int"]    = Int;
+        else {
+            throw parser_error(sstream() << "unknown identifier '" << id << "'", p);
+        }
     }
 
     expr parse_num() {
@@ -426,12 +413,8 @@ class parser::imp {
     }
 
     /** \brief Register the name \c n as a local declaration. */
-    void register_binding(name const & n, expr const & type, expr const & val = expr()) {
+    void register_binding(name const & n) {
         unsigned lvl = m_num_local_decls;
-        if (val)
-            m_context = extend(m_context, n, expr(), val);
-        else
-            m_context = extend(m_context, n, type);
         m_local_decls.insert(n, lvl);
         m_num_local_decls++;
         lean_assert(m_local_decls.find(n)->second == lvl);
@@ -446,10 +429,10 @@ class parser::imp {
         check_lparen_next("'(' expected in parse_let");
 
         // Process variable bindings
-        buffer<std::tuple<pos_info, name, expr>> bindings;
+        bindings_buffer bindings;
         do {
-            std::tuple<pos_info, name, expr> binding = parse_var_binding();
-            register_binding(std::get<1>(binding), expr(), std::get<2>(binding));
+            std::tuple<pos_info, name, expr, expr> binding = parse_var_binding();
+            register_binding(std::get<1>(binding));
             bindings.push_back(binding);
         } while (curr_is_lparen());
         check_rparen_next("')' expected in parse_let");
@@ -460,7 +443,11 @@ class parser::imp {
         while (i > 0) {
             --i;
             auto p = std::get<0>(bindings[i]);
-            r = save(mk_let(std::get<1>(bindings[i]), std::get<2>(bindings[i]), r), p);
+            r = save(mk_let(std::get<1>(bindings[i]),
+                            std::get<2>(bindings[i]),
+                            std::get<3>(bindings[i]),
+                            r),
+                     p);
         }
         return r;
     }
@@ -472,10 +459,10 @@ class parser::imp {
 
         // Process <sorted_var>+
         check_lparen_next("'(' expected in parse_quantifier");
-        buffer<std::tuple<pos_info, name, expr>> bindings;
+        bindings_buffer bindings;
         do {
-            std::tuple<pos_info, name, expr> binding = parse_sorted_var();
-            register_binding(std::get<1>(binding), expr(), std::get<2>(binding));
+            std::tuple<pos_info, name, expr, expr> binding = parse_sorted_var();
+            register_binding(std::get<1>(binding));
             bindings.push_back(binding);
         } while (curr_is_lparen());
         check_rparen_next("')' expected in parse_quantifier");
@@ -679,26 +666,28 @@ class parser::imp {
         return left;
     }
 
-    std::tuple<pos_info, name, expr> parse_sorted_var() {
+    std::tuple<pos_info, name, expr, expr> parse_sorted_var() {
         /* <sorted_var> ::= ( symbol sort ) */
         auto p = pos();
         check_lparen_next("sorted_var: '(' expected");
         name id = check_symbol_next("invalid fun declaration, identifier expected");
         normalizer norm(m_frontend);
-        scoped_set_interruptable_ptr<normalizer> set(m_normalizer, &norm);
         expr sort = norm(parse_sort());
+        expr ty = infer_type(sort, m_frontend);
+        scoped_set_interruptable_ptr<normalizer> set(m_normalizer, &norm);
         check_rparen_next("sorted_var: ')' expected");
-        return std::make_tuple(p, id, sort);
+        return std::make_tuple(p, id, ty, sort);
     }
 
-    std::tuple<pos_info, name, expr> parse_var_binding() {
+    std::tuple<pos_info, name, expr, expr> parse_var_binding() {
         /* <var_binding> ::= ( <symbol> <term> ) */
         auto p = pos();
         check_lparen_next("var_binding: '(' expected");
         name id = check_symbol_next("identifier expected in parse_var_binding");
         expr term = parse_term();
+        expr ty = infer_type(term, m_frontend);
         check_rparen_next("var_binding: ')' expected");
-        return std::make_tuple(p, id, term);
+        return std::make_tuple(p, id, ty, term);
     }
 
     void parse_assert() {
@@ -744,13 +733,20 @@ class parser::imp {
             regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
     }
 
-    expr mk_abstraction(buffer<std::tuple<pos_info, name, expr>> const & bindings, expr const & body) {
+    /**
+        \brief Create a lambda/Pi abstraction, using the giving binders
+        and body.
+    */
+    expr mk_abstraction(bool is_lambda, bindings_buffer const & bindings, expr const & body) {
         expr result = body;
         unsigned i = bindings.size();
         while (i > 0) {
             --i;
             pos_info p = std::get<0>(bindings[i]);
-            result = save(mk_lambda(std::get<1>(bindings[i]), std::get<2>(bindings[i]), result), p);
+            if (is_lambda)
+                result = save(mk_lambda(std::get<1>(bindings[i]), std::get<2>(bindings[i]), result), p);
+            else
+                result = save(mk_pi(std::get<1>(bindings[i]), std::get<2>(bindings[i]), result), p);
         }
         return result;
     }
@@ -764,23 +760,23 @@ class parser::imp {
         check_lparen_next("invalid token in declare-fun, '(' expected");
         // Save scope
         mk_scope scope(*this);
-        buffer<std::tuple<pos_info, name, expr>> sorted_vars;
+        bindings_buffer bindings;
         /* process <sorted_var>* */
         while(curr_is_lparen()) {
-            std::tuple<pos_info, name, expr> binding = parse_sorted_var();
-            sorted_vars.push_back(binding);
-            register_binding(std::get<1>(binding), std::get<2>(binding));
+            std::tuple<pos_info, name, expr, expr> binding = parse_sorted_var();
+            bindings.push_back(binding);
+            register_binding(std::get<1>(binding));
         }
         check_rparen_next("invalid token in declare-fun, ')' expected");
         expr ret_sort = parse_sort();
         expr body = parse_term();
 
-        unsigned i = sorted_vars.size();
+        unsigned i = bindings.size();
         while(i-- > 0) {
-            ret_sort = mk_arrow(std::get<2>(sorted_vars[i]), ret_sort);
+            ret_sort = mk_arrow(std::get<2>(bindings[i]), ret_sort);
         }
 
-        expr abs = mk_abstraction(sorted_vars, body);
+        expr abs = mk_abstraction(true, bindings, body);
 
         m_frontend.add_definition(id, ret_sort, abs);
         if(m_verbosity > 0)
@@ -807,20 +803,20 @@ class parser::imp {
         name id = check_symbol_next("invalid sort declaration, identifier expected");
         check_lparen_next("invalid token in define-sort, '(' expected");
 
-        buffer<std::tuple<pos_info, name, expr>> args;
+        bindings_buffer bindings;
         /* process <symbols>* */
         mk_scope scope(*this);
         while(curr_is_symbol()) {
             auto p = pos();
             name arg_name = check_symbol_next("invalid sort declaration, identifier expected");
-            args.push_back(std::make_tuple(p, arg_name, Type()));
-            register_binding(arg_name, Type());
+            bindings.push_back(std::make_tuple(p, arg_name, Type(), Type()));
+            register_binding(arg_name);
         }
         check_rparen_next("invalid token in define-sort, ')' expected");
 
         /* process <sort> */
         expr s = Type();
-        unsigned i = args.size();
+        unsigned i = bindings.size();
         while(i-- > 0) {
             s = mk_arrow(Type(), s);
         }
@@ -831,7 +827,7 @@ class parser::imp {
 
         expr body = parse_sort();
 
-        expr abs = mk_abstraction(args, body);
+        expr abs = mk_abstraction(true, bindings, body);
         if(m_verbosity > 0)
             regular(m_frontend) << " = "<< abs << endl;
 
@@ -1066,6 +1062,9 @@ class parser::imp {
         case sexpr_kind::MPQ:
             /* TODO */
             return DoubleOption;
+        default:
+            /* TODO */
+            return DoubleOption;
         }
     }
 
@@ -1197,8 +1196,6 @@ public:
         updt_options();
         m_found_errors = false;
         m_num_local_decls = 0;
-//        m_scanner.set_command_keywords(g_command_keywords);
-        init_builtins();
         scan();
     }
 

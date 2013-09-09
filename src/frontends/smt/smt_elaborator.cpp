@@ -25,7 +25,8 @@ namespace smt {
 static name g_choice_name(name(name(name(0u), "library"), "choice"));
 static expr g_choice = mk_constant(g_choice_name);
 static format g_assignment_fmt  = format(":=");
-static format g_unification_fmt = format("\u2248");
+static format g_unification_u_fmt = format("\u2248");
+static format g_unification_fmt = format("=?=");
 
 expr mk_choice(unsigned num_fs, expr const * fs) {
     lean_assert(num_fs >= 2);
@@ -425,10 +426,30 @@ class elaborator::imp {
             return expr_pair(new_e, t);
         }
         case expr_kind::Let: {
+            expr_pair t_p;
+            if (let_type(e))
+                 t_p = process(let_type(e), ctx);
             auto v_p = process(let_value(e), ctx);
-            auto b_p = process(let_body(e), extend(ctx, let_name(e), v_p.second, v_p.first));
+            if (let_type(e)) {
+                expr const & expected = t_p.first;
+                expr const & given    = v_p.second;
+                if (has_metavar(expected) || has_metavar(given)) {
+                    info_ref r = mk_expected_type_info(let_value(e), v_p.first, expected, given, ctx);
+                    m_constraints.push_back(constraint(expected, given, ctx, r));
+                } else {
+                    if (!is_convertible(expected, given, ctx)) {
+                        expr coercion = m_frontend.get_coercion(given, expected);
+                        if (coercion) {
+                            v_p.first = mk_app(coercion, v_p.first);
+                        } else {
+                            throw def_type_mismatch_exception(m_env, ctx, let_name(e), let_type(e), v_p.first, v_p.second);
+                        }
+                    }
+                }
+            }
+            auto b_p = process(let_body(e), extend(ctx, let_name(e), t_p.first ? t_p.first : v_p.second, v_p.first));
             expr t   = lower_free_vars_mmv(b_p.second, 1, 1);
-            expr new_e = update_let(e, v_p.first, b_p.first);
+            expr new_e = update_let(e, t_p.first, v_p.first, b_p.first);
             add_trace(e, new_e);
             return expr_pair(new_e, t);
         }}
@@ -819,11 +840,12 @@ public:
     }
 
     format pp(formatter & f, options const & o) const {
+        bool unicode = get_pp_unicode(o);
         format r;
         bool first = true;
         for (auto c : m_constraints) {
             if (first) first = false; else r += line();
-            r += group(format{f(c.m_lhs, o), space(), g_unification_fmt, line(), f(c.m_rhs, o)});
+            r += group(format{f(c.m_lhs, o), space(), unicode ? g_unification_u_fmt : g_unification_fmt, line(), f(c.m_rhs, o)});
         }
         return r;
     }

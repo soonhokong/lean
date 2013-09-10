@@ -23,8 +23,8 @@ public:
     /** \brief Parse a sequence of commands */
     bool operator()();
 
-    /** \brief Parse a single expression */
-    expr parse_expr();
+    /** \brief Parse a single term */
+    expr parse_term();
 
     void set_interrupt(bool flag);
     void interrupt() { set_interrupt(true); }
@@ -49,8 +49,8 @@ public:
 inline bool parse_commands(frontend & fe, std::istream & in, bool use_exceptions = true, bool interactive = false) {
     return parser(fe, in, use_exceptions, interactive)();
 }
-inline expr parse_expr(frontend const & fe, std::istream & in) {
-    return parser(fe, in).parse_expr();
+inline expr parse_term(frontend const & fe, std::istream & in) {
+    return parser(fe, in).parse_term();
 }
 }
 }

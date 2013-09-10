@@ -1248,6 +1248,15 @@ public:
     //     }
     // }
 
+    /** \brief Parse a term. */
+    expr parse_term_main() {
+        try {
+            return m_elaborator(parse_term());
+        } catch (parser_error & ex) {
+            throw parser_exception(ex.what(), ex.m_pos.first, ex.m_pos.second);
+        }
+    }
+
     void set_interrupt(bool flag) {
         m_frontend.set_interrupt(flag);
         m_elaborator.set_interrupt(flag);
@@ -1276,9 +1285,9 @@ void parser::set_interrupt(bool flag) {
     m_ptr->set_interrupt(flag);
 }
 
-// expr parser::parse_expr() {
-//     return m_ptr->parse_expr_main();
-// }
+expr parser::parse_term() {
+    return m_ptr->parse_term_main();
+}
 
 shell::shell(frontend & fe):m_frontend(fe) {
 }

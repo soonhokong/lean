@@ -55,15 +55,13 @@ static void tst2() {
     fe.add_var("y", Bool);
     fe.add_var("z", Bool);
     expr x = Const("x"); expr y = Const("y"); expr z = Const("z");
-    check(fe, "x && y", And(x, y));
-    check(fe, "x && y || z", Or(And(x, y), z));
-    check(fe, "x || y && z", Or(x, And(y, z)));
-    check(fe, "x || y || x && z", Or(x, Or(y, And(x, z))));
-    check(fe, "x || y || x && z => x && y", Implies(Or(x, Or(y, And(x, z))), And(x, y)));
-    check(fe, "x ∨ y ∨ x ∧ z ⇒ x ∧ y", Implies(Or(x, Or(y, And(x, z))), And(x, y)));
-    check(fe, "x⇒y⇒z⇒x", Implies(x, Implies(y, Implies(z, x))));
-    check(fe, "x=>y=>z=>x", Implies(x, Implies(y, Implies(z, x))));
-    check(fe, "x=>(y=>z)=>x", Implies(x, Implies(Implies(y, z), x)));
+    check(fe, "(and x y)", And(x, y));
+    check(fe, "(or (and x y) z)", Or(And(x, y), z));
+    check(fe, "(or (x (and y z))", Or(x, And(y, z)));
+    check(fe, "(or x (or y (and x z)))", Or(x, Or(y, And(x, z))));
+    check(fe, "(=> (or x y (and x z)) (and x y))", Implies(Or(x, Or(y, And(x, z))), And(x, y)));
+    check(fe, "(implies (x (implies y (implies z x))))", Implies(x, Implies(y, Implies(z, x))));
+    check(fe, "(implies x (implies (implies y z) x))", Implies(x, Implies(Implies(y, z), x)));
 }
 
 int main() {

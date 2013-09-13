@@ -533,15 +533,100 @@ class parser::imp {
         not_implemented_yet();
     }
 
-    expr parse_id() {
+    /**
+       \brief Return the function associated with the given operator.
+       If the operator has been overloaded, it returns a choice expression
+       of the form <tt>(choice f_1 f_2 ... f_k)</tt> where f_i's are different options.
+       After we finish parsing, the elaborator
+       resolve/decide which f_i should be used.
+    */
+    expr mk_fun(operator_info const & op) {
+        list<expr> const & fs = op.get_denotations();
+        lean_assert(!is_nil(fs));
+        auto it = fs.begin();
+        expr r = *it;
+        ++it;
+        if (it == fs.end()) {
+            return r;
+        } else {
+            buffer<expr> alternatives;
+            alternatives.push_back(r);
+            for (; it != fs.end(); ++it)
+                alternatives.push_back(*it);
+            return mk_choice(alternatives.size(), alternatives.data());
+        }
+    }
+
+    /**
+       \brief Create an application for the given operator and
+       (explicit) arguments.
+    */
+    expr mk_application(operator_info const & op, pos_info const & pos, unsigned num_args, expr const * args) {
+        buffer<expr> new_args;
+        expr f = save(mk_fun(op), pos);
+        new_args.push_back(f);
+        // I'm using the fact that all denotations are compatible.
+        // See lean_frontend.cpp for the definition of compatible denotations.
+        expr const & d = head(op.get_denotations());
+        if (is_constant(d) && m_frontend.has_implicit_arguments(const_name(d))) {
+            std::vector<bool> const & imp_args = m_frontend.get_implicit_arguments(const_name(d));
+            unsigned i = 0;
+            for (unsigned j = 0; j < imp_args.size(); j++) {
+                if (imp_args[j]) {
+                    new_args.push_back(save(mk_placholder(), pos));
+                } else {
+                    if (i >= num_args)
+                        throw parser_error(sstream() << "unexpected number of arguments for denotation with implicit arguments, it expects " << num_args << " explicit argument(s)", pos);
+                    new_args.push_back(args[i]);
+                    i++;
+                }
+            }
+        } else {
+            new_args.append(num_args, args);
+        }
+        return save(mk_app(new_args.size(), new_args.data()), pos);
+    }
+    expr mk_application(operator_info const & op, pos_info const & pos, std::initializer_list<expr> const & l) {
+        return mk_application(op, pos, l.size(), l.begin());
+    }
+    expr mk_application(operator_info const & op, pos_info const & pos, expr const & arg) {
+        return mk_application(op, pos, 1, &arg);
+    }
+    expr mk_application(operator_info const & op, pos_info const & pos, buffer<expr> const & args) {
+        return mk_application(op, pos, args.size(), args.data());
+    }
+
+    /** \brief Parse a user defined prefix operator. */
+    expr parse_prefix(operator_info const & op) {
+        std::cerr << "parse_prefix : " << op << std::endl;
+        auto p = pos();
+        return mk_application(op, p, parse_term(op.get_precedence()));
+    }
+
+    expr parse_nud_id() {
         auto p = pos();
         name id = curr_name();
+        std::cerr << "parse_nud_id + " << id << std::endl;
         next();
         auto it = m_local_decls.find(id);
         if (it != m_local_decls.end()) {
+            std::cerr << "parse_nud_id - found in local_decls" << std::endl;
             return save(mk_var(m_num_local_decls - it->second - 1), p);
         } else {
-            return save(get_name_ref(id, p), p);
+            std::cerr << "parse_nud_id - not found in local_decls" << std::endl;
+            operator_info op = m_frontend.find_nud(id);
+            if (op) {
+                std::cerr << "parse_nud_id - " << op << " is in frontend" << std::endl;
+                switch (op.get_fixity()) {
+                case fixity::Prefix:  return parse_prefix(op);
+//                case fixity::Mixfixl: return parse_mixfixl(op);
+//                case fixity::Mixfixc: return parse_mixfixc(op);
+                default: lean_unreachable(); return expr();
+                }
+            } else {
+                std::cerr << "parse_nud_id - " << id << " is not in frontend" << std::endl;
+                return save(get_name_ref(id, p), p);
+            }
         }
     }
 
@@ -550,11 +635,11 @@ class parser::imp {
         switch(curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
-            return parse_id();
+            return parse_nud_id();
         case scanner::token::LeftParen:
         {
             next();
-            expr s = parse_id();
+            expr s = parse_nud_id();
             /* process <sort>* */
             do {
                 s = mk_app(s, parse_sort());
@@ -572,13 +657,13 @@ class parser::imp {
         switch(curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
-            return parse_id();
+            return parse_nud_id();
         case scanner::token::LeftParen:
         {
             /* ( as <identifier> <sort> ) */
             next();
             check_name_next("as", "'as' is required for a qualified identifier");
-            expr id = parse_id();
+            expr id = parse_nud_id();
             expr s = parse_sort();
             check_rparen_next("')' expected in parse_qual_id()");
             /* TODO */
@@ -613,7 +698,7 @@ class parser::imp {
                 // TODO r = std::get<1>(attr);
             } else {
                 /* ( <qual_identifier) (term)+ */
-                r = parse_id_terms();
+                r = parse_nud_id();
             }
             break;
         case scanner::token::LeftParen:
@@ -642,13 +727,14 @@ class parser::imp {
         case scanner::token::DecVal: return parse_dec();
         case scanner::token::StringVal: return parse_string();
         case scanner::token::LeftParen:  return parse_lparen();
-        case scanner::token::Symbol: return parse_id();
+        case scanner::token::Symbol: return parse_nud_id();
         default:
             throw parser_error("unexpected token in parse_nud()", pos());
         }
     }
 
     expr parse_term(unsigned rbp = 0) {
+        std::cout << "parse_term" << std::endl;
         expr left = parse_nud();
         return left;
     }
@@ -996,9 +1082,9 @@ class parser::imp {
         case scanner::token::StringVal:
             return parse_spec_constant();
         case scanner::token::Symbol:
-            return parse_id();
+            return parse_nud_id();
         case scanner::token::Keyword:
-            return parse_id(); /* TODO: what's the meaning of keyword in sexpression? */
+            return parse_nud_id(); /* TODO: what's the meaning of keyword in sexpression? */
         case scanner::token::LeftParen: {
             next();
             expr t = parse_sexpr();

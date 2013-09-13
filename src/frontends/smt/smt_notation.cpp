@@ -6,6 +6,7 @@ Author: Leonardo de Moura
         Soonho Kong
 */
 #include "builtin.h"
+#include "arithlibs.h"
 #include "smt_frontend.h"
 
 namespace lean {
@@ -14,10 +15,20 @@ namespace smt {
    \brief Initialize builtin notation.
 */
 void init_builtin_notation(frontend & f) {
+    std::cerr << "Add init builtin notations" << std::endl;
     f.add_prefix("not", 40, mk_not_fn());
-    f.add_infixr("and", 35, mk_and_fn());
-    f.add_infixr("or", 30, mk_or_fn());
-    f.add_infixr("=>", 25, mk_implies_fn());
+    f.add_prefix("and", 35, mk_and_fn());
+    f.add_prefix("or",  30, mk_or_fn());
+    f.add_prefix("=>",  25, mk_implies_fn());
+
+    f.add_prefix("<", 50, mk_nat_lt_fn());
+    f.add_prefix(">", 50, mk_nat_gt_fn());
+    f.add_prefix("<=", 50, mk_nat_le_fn());
+    f.add_prefix(">=", 50, mk_nat_ge_fn());
+
+    f.add_prefix("+", 65, mk_nat_add_fn());
+    f.add_prefix("-", 65, mk_nat_sub_fn());
+    f.add_prefix("*", 70, mk_nat_mul_fn());
 }
 
 void init_theory_ArrayEx(frontend & f) {

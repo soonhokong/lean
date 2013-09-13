@@ -28,18 +28,20 @@ static void parse(frontend & fe, char const * str) {
     }
 }
 
-static void tst1() {
-    frontend fe;
-    parse(fe, "Variable x : Bool Variable y : Bool Axiom H : x && y || x => x");
-    parse(fe, "Eval true && true");
-    parse(fe, "Show true && false Eval true && false");
-    parse(fe, "Infixl 35 & : and Show true & false & false Eval true & false");
-    parse(fe, "Notation 100 if _ then _ fi : implies Show if true then false fi");
-    parse(fe, "Show Pi (A : Type), A -> A");
-    parse(fe, "Check Pi (A : Type), A -> A");
-}
+// static void tst1() {
+//     frontend fe;
+//     parse(fe, "Variable x : Bool Variable y : Bool Axiom H : x && y || x => x");
+//     parse(fe, "Eval true && true");
+//     parse(fe, "Show true && false Eval true && false");
+//     parse(fe, "Infixl 35 & : and Show true & false & false Eval true & false");
+//     parse(fe, "Notation 100 if _ then _ fi : implies Show if true then false fi");
+//     parse(fe, "Show Pi (A : Type), A -> A");
+//     parse(fe, "Check Pi (A : Type), A -> A");
+// }
 
 static void check(frontend const & fe, char const * str, expr const & expected) {
+    std::cout << "Check: " << str << std::endl;
+    std::cout << "==================================" << std::endl;
     std::istringstream in(str);
     try {
         expr got = parse_term(fe, in);
@@ -47,6 +49,7 @@ static void check(frontend const & fe, char const * str, expr const & expected) 
     } catch (exception &) {
         lean_unreachable();
     }
+    std::cout << "==================================" << std::endl;
 }
 
 static void tst2() {
@@ -65,7 +68,7 @@ static void tst2() {
 }
 
 int main() {
-    tst1();
+    // tst1();
     tst2();
     return has_violations() ? 1 : 0;
 }

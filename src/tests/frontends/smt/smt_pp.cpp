@@ -4,12 +4,13 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 Author: Leonardo de Moura
 */
-#include "printer.h"
-#include "abstract.h"
-#include "builtin.h"
-#include "smt_frontend.h"
-#include "smt_pp.h"
-#include "test.h"
+#include "util/test.h"
+#include "kernel/abstract.h"
+#include "kernel/builtin.h"
+#include "library/printer.h"
+#include "frontends/smt/frontend.h"
+#include "frontends/smt/pp.h"
+
 using namespace lean;
 using namespace smt;
 

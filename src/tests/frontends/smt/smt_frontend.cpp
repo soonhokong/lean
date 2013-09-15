@@ -4,15 +4,17 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 Author: Leonardo de Moura
 */
-#include "test.h"
-#include "environment.h"
-#include "kernel_exception.h"
-#include "builtin.h"
-#include "printer.h"
-#include "abstract.h"
-#include "smt_frontend.h"
-#include "smt_operator_info.h"
-#include "smt_pp.h"
+#include <vector>
+#include "util/test.h"
+#include "kernel/environment.h"
+#include "kernel/kernel_exception.h"
+#include "kernel/builtin.h"
+#include "kernel/abstract.h"
+#include "library/printer.h"
+#include "frontends/smt/frontend.h"
+#include "frontends/smt/operator_info.h"
+#include "frontends/smt/pp.h"
+
 using namespace lean;
 using namespace smt;
 
@@ -160,7 +162,7 @@ static void tst10() {
     expr x = Const("xxxxxxxxxxxx");
     expr y = Const("y");
     expr z = Const("foo");
-    expr e = Let({{x, True}, {y, And({x,x,x,x,x,x,x,x})}, {z, And(x, y)}}, Or({x, x, x, x, x, x, x, x, x, z, z, z, z, z, z, z}));
+    expr e = Let({{x, True}, {y, And({x, x, x, x, x, x, x, x})}, {z, And(x, y)}}, Or({x, x, x, x, x, x, x, x, x, z, z, z, z, z, z, z}));
     std::cout << e << "\n";
     std::cout << fmt(e) << "\n";
 }
@@ -189,7 +191,7 @@ static void tst11() {
     } catch (exception & ex) {
         std::cout << "Expected error: " << ex.what() << std::endl;
     }
-    f.add_var(name{"h","explicit"}, Pi({A, Type()}, A >> (A >> A)));
+    f.add_var(name{"h", "explicit"}, Pi({A, Type()}, A >> (A >> A)));
     f.add_var("h", Pi({A, Type()}, A >> (A >> A)));
     try {
         f.mark_implicit_arguments("h", {true, false, false});

@@ -7,9 +7,10 @@ Author: Leonardo de Moura
 */
 #pragma once
 #include <memory>
-#include "environment.h"
-#include "state.h"
-#include "smt_operator_info.h"
+#include <vector>
+#include "kernel/environment.h"
+#include "library/state.h"
+#include "frontends/smt/operator_info.h"
 
 namespace lean {
 namespace smt {

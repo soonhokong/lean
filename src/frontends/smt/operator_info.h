@@ -6,10 +6,11 @@ Author: Leonardo de Moura
         Soonho Kong
 */
 #pragma once
-#include "name.h"
-#include "list.h"
-#include "format.h"
-#include "object.h"
+#include <algorithm>
+#include "util/name.h"
+#include "util/list.h"
+#include "util/sexpr/format.h"
+#include "kernel/object.h"
 
 namespace lean {
 namespace smt {

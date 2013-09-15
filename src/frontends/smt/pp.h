@@ -6,9 +6,9 @@ Author: Leonardo de Moura
         Soonho Kong
 */
 #pragma once
-#include "context.h"
-#include "formatter.h"
-#include "options.h"
+#include "util/sexpr/options.h"
+#include "kernel/context.h"
+#include "library/formatter.h"
 
 namespace lean {
 namespace smt {

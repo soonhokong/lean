@@ -6,7 +6,7 @@ Author: Leonardo de Moura
         Soonho Kong
 */
 #pragma once
-#include "object.h"
+#include "kernel/object.h"
 
 namespace lean {
 namespace smt {

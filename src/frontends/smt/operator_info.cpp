@@ -5,8 +5,8 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Author: Leonardo de Moura
         Soonho Kong
 */
-#include "smt_operator_info.h"
-#include "rc.h"
+#include "util/rc.h"
+#include "frontends/smt/operator_info.h"
 
 namespace lean {
 namespace smt {
@@ -37,7 +37,6 @@ struct operator_info::imp {
             m_precedence == other.m_precedence &&
             m_op_parts == other.m_op_parts;
     }
-
 };
 
 operator_info::operator_info(imp * p):m_ptr(p) {}

@@ -5,10 +5,11 @@
   Author: Leonardo de Moura
 */
 #include <sstream>
-#include "test.h"
-#include "smt_scanner.h"
-#include "exception.h"
-#include "escaped.h"
+#include <string>
+#include "util/test.h"
+#include "util/exception.h"
+#include "util/escaped.h"
+#include "frontends/smt/scanner.h"
 
 using namespace lean;
 using namespace smt;
@@ -98,15 +99,15 @@ static void tst1() {
     scan("(exit)");
 
     check("(set-logic QF_UF)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun p () Bool)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (and p (not p)))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::RightParen,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::RightParen, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     std::cout << "=======================" << std::endl << std::endl;
 }
 
@@ -122,17 +123,17 @@ static void tst2() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-option :print-success false)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-logic QF_UF)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun p () Bool)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (and p (not p)))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::RightParen,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::RightParen, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst3() {
@@ -148,19 +149,19 @@ static void tst3() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-logic QF_LIA)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun x () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun y () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (= (+ x (* 2 y)) 20))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::NumVal,st::Symbol,st::RightParen,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::NumVal, st::Symbol, st::RightParen, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(assert (= (- x y) 2))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst4() {
@@ -176,19 +177,19 @@ static void tst4() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-logic QF_LIA)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun x () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun y () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (= (+ x (* 2 y)) 20))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::NumVal,st::Symbol,st::RightParen,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::NumVal, st::Symbol, st::RightParen, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(assert (= (- x y) 3))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst5() {
@@ -208,27 +209,27 @@ static void tst5() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-option :print-success false)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-option :produce-models true)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-option :interactive-mode true)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-logic QF_LIA)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun x () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun y () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (= (+ x (* 2 y)) 20))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::NumVal,st::Symbol,st::RightParen,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::NumVal, st::Symbol, st::RightParen, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(assert (= (- x y) 2))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(get-value (x y))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::RightParen, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst6() {
@@ -251,33 +252,33 @@ static void tst6() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-option :print-success false)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-logic QF_LIA)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-fun x () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun y () Int)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (= (+ x (* 2 y)) 20))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::Symbol,st::NumVal,st::Symbol,st::RightParen,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::Symbol, st::NumVal, st::Symbol, st::RightParen, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(push 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(assert (= (- x y) 2))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(pop 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(push 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(assert (= (- x y) 3))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::NumVal,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::NumVal, st::RightParen, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(pop 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst7() {
@@ -306,45 +307,45 @@ static void tst7() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(set-option :print-success false)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::Symbol, st::RightParen});
     check("(set-logic QF_UF)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::RightParen});
     check("(declare-sort A 0)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::NumVal, st::RightParen});
     check("(declare-fun a () A)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun b () A)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun c () A)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun d () A)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(declare-fun e () A)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::LeftParen,st::RightParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::LeftParen, st::RightParen, st::Symbol, st::RightParen});
     check("(assert (or (= c a)(= c b)))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::RightParen, st::RightParen});
     check("(assert (or (= d a)(= d b)))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::RightParen, st::RightParen});
     check("(assert (or (= e a)(= e b)))",
-          {st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen,st::RightParen,st::RightParen});
+          {st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen, st::RightParen, st::RightParen});
     check("(push 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(distinct c d)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(pop 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(push 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(distinct c d e)",
-          {st::LeftParen,st::Symbol,st::Symbol,st::Symbol,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Symbol, st::Symbol, st::Symbol, st::RightParen});
     check("(check-sat)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
     check("(pop 1)",
-          {st::LeftParen,st::Symbol,st::NumVal,st::RightParen});
+          {st::LeftParen, st::Symbol, st::NumVal, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst8() {
@@ -355,9 +356,9 @@ static void tst8() {
     std::cout << "=======================" << std::endl << std::endl;
 
     check("(get-info :name)",
-          {st::LeftParen,st::Symbol,st::Keyword,st::RightParen});
+          {st::LeftParen, st::Symbol, st::Keyword, st::RightParen});
     check("(exit)",
-          {st::LeftParen,st::Symbol,st::RightParen});
+          {st::LeftParen, st::Symbol, st::RightParen});
 }
 
 static void tst9() {

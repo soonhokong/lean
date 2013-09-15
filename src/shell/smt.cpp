@@ -1,24 +1,36 @@
+/*
+Copyright (c) 2013 Microsoft Corporation. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+
+Author: Soonho Kong
+        Leonardo de Moura
+*/
 #include <iostream>
 #include <fstream>
 #include <signal.h>
+#include "util/interruptable_ptr.h"
+#include "library/printer.h"
+#include "frontends/smt/parser.h"
 #include "version.h"
-#include "printer.h"
-#include "interruptable_ptr.h"
-#include "smt_parser.h"
-using namespace lean;
 
-static interruptable_ptr<smt::shell> g_smt_shell;
+using lean::interruptable_ptr;
+using lean::scoped_set_interruptable_ptr;
+using lean::smt::shell;
+using lean::smt::parser;
+using lean::smt::frontend;
 
-static void on_ctrl_c(int) {
+static interruptable_ptr<shell> g_smt_shell;
+
+static void on_ctrl_c(int c) {
     g_smt_shell.set_interrupt(true);
 }
 
 bool smt_shell() {
     std::cout << "Lean (version " << LEAN_VERSION_MAJOR << "." << LEAN_VERSION_MINOR << ")\n";
     std::cout << "Type Ctrl-D to exit or 'Help.' for help."<< std::endl;
-    smt::frontend f;
-    smt::shell sh(f);
-    scoped_set_interruptable_ptr<smt::shell> set(g_smt_shell, &sh);
+    frontend f;
+    shell sh(f);
+    scoped_set_interruptable_ptr<shell> set(g_smt_shell, &sh);
     signal(SIGINT, on_ctrl_c);
     return sh();
 }
@@ -28,10 +40,10 @@ int main(int argc, char ** argv) {
         return smt_shell() ? 0 : 1;
     } else {
         bool ok = true;
-        smt::frontend f;
+        frontend f;
         for (int i = 1; i < argc; i++) {
             std::ifstream in(argv[i]);
-            smt::parser p(f, in);
+            parser p(f, in);
             if (!p())
                 ok = false;
         }

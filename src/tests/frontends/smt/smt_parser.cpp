@@ -5,12 +5,12 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Author: Leonardo de Moura
 */
 #include <sstream>
-#include "builtin.h"
-#include "smt_parser.h"
-#include "smt_pp.h"
-#include "printer.h"
-#include "exception.h"
-#include "test.h"
+#include "util/test.h"
+#include "util/exception.h"
+#include "kernel/builtin.h"
+#include "library/printer.h"
+#include "frontends/smt/parser.h"
+#include "frontends/smt/pp.h"
 using namespace lean;
 using namespace smt;
 

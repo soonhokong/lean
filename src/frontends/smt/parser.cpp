@@ -5,29 +5,6 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Author: Soonho Kong
         Leonardo de Moura
 */
-#include <unordered_map>
-#include "scoped_map.h"
-#include "exception.h"
-#include "normalizer.h"
-#include "type_checker.h"
-#include "free_vars.h"
-#include "builtin.h"
-#include "arithlibs.h"
-#include "printer.h"
-#include "state.h"
-#include "option_declarations.h"
-#include "expr_maps.h"
-#include "sstream.h"
-#include "kernel_exception.h"
-#include "kernel_exception_formatter.h"
-#include "metavar.h"
-#include "smt_frontend.h"
-#include "smt_elaborator.h"
-#include "smt_elaborator_exception.h"
-#include "smt_parser.h"
-#include "smt_scanner.h"
-#include "smt_notation.h"
-#include "smt_pp.h"
 #ifdef LEAN_USE_READLINE
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,6 +12,32 @@ Author: Soonho Kong
 #include <readline/readline.h>
 #include <readline/history.h>
 #endif
+#include <unordered_map>
+#include <utility>
+#include <string>
+#include <vector>
+#include "util/scoped_map.h"
+#include "util/exception.h"
+#include "util/sstream.h"
+#include "util/sexpr/option_declarations.h"
+#include "kernel/normalizer.h"
+#include "kernel/type_checker.h"
+#include "kernel/free_vars.h"
+#include "kernel/builtin.h"
+#include "kernel/kernel_exception.h"
+#include "kernel/expr_maps.h"
+#include "library/arith/arith.h"
+#include "library/printer.h"
+#include "library/state.h"
+#include "library/kernel_exception_formatter.h"
+#include "library/metavar.h"
+#include "frontends/smt/frontend.h"
+#include "frontends/smt/elaborator.h"
+#include "frontends/smt/elaborator_exception.h"
+#include "frontends/smt/parser.h"
+#include "frontends/smt/scanner.h"
+#include "frontends/smt/notation.h"
+#include "frontends/smt/pp.h"
 
 #ifndef SMT_DEFAULT_PARSER_PRINT_SUCCESS
 #define SMT_DEFAULT_PARSER_PRINT_SUCCESS true
@@ -313,7 +316,7 @@ class parser::imp {
     /** \brief Throws a parser error if the current token is not a DecVal */
     void check_dec(char const * msg)     { if (!curr_is_dec()) throw parser_error(msg, pos()); }
     /** \brief Throws a parser error if the current token is not an identifier named \c op. */
-    void check_name(name const & op, char const * msg) { if(!curr_is_symbol() || curr_name() != op) throw parser_error(msg, pos()); }
+    void check_name(name const & op, char const * msg) { if (!curr_is_symbol() || curr_name() != op) throw parser_error(msg, pos()); }
 
     // ============================
     // check_<token>_next functions
@@ -350,13 +353,12 @@ class parser::imp {
             object_kind k = obj.kind();
             if (k == object_kind::Definition || k == object_kind::Postulate) {
                 return mk_constant(obj.get_name());
-            } if (k == object_kind::Builtin) {
+            } else if (k == object_kind::Builtin) {
                 return obj.get_value();
             } else {
                 throw parser_error(sstream() << "invalid object reference, object '" << id << "' is not an expression.", p);
             }
-        }
-        else {
+        } else {
             throw parser_error(sstream() << "unknown identifier '" << id << "'", p);
         }
     }
@@ -395,7 +397,7 @@ class parser::imp {
     }
 
     [[ noreturn ]] void not_implemented_yet() {
-        // TODO
+        // TODO(Soonho)
         throw parser_error("not implemented yet", pos());
     }
 
@@ -487,7 +489,7 @@ class parser::imp {
         next();
         sexpr val;
 
-        switch(curr()) {
+        switch (curr()) {
         case scanner::token::NumVal:
         case scanner::token::HexVal:
         case scanner::token::BinVal:
@@ -504,7 +506,7 @@ class parser::imp {
             break;
         case scanner::token::Symbol: {
             name n = curr_name();
-            if(n == "true") {
+            if (n == "true") {
                 val = true;
             } else if (n == "false") {
                 val = false;
@@ -516,7 +518,7 @@ class parser::imp {
         }
         case scanner::token::LeftParen:
             next();
-            // TODO: Currently, it's <s_expr>. change to <s_expr>*
+            // TODO(Soonho): Currently, it's <s_expr>. change to <s_expr>*
             val = parse_sexpr();
             check_rparen_next("')' expected in parse_attribute");
             break;
@@ -632,7 +634,7 @@ class parser::imp {
 
     expr parse_sort() {
         /* <sort> ::= <identifier> | ( <identifier> <sort>+ ) */
-        switch(curr()) {
+        switch (curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
             return parse_nud_id();
@@ -643,7 +645,7 @@ class parser::imp {
             /* process <sort>* */
             do {
                 s = mk_app(s, parse_sort());
-            } while(curr_is_symbol() || curr_is_lparen());
+            } while (curr_is_symbol() || curr_is_lparen());
             check_rparen_next("')' expected in parse_sort()");
             return s;
         }
@@ -654,7 +656,7 @@ class parser::imp {
 
     expr parse_qual_id() {
         /* <qual_identifier> ::= <identifier> | ( as <identifier> <sort> ) */
-        switch(curr()) {
+        switch (curr()) {
         case scanner::token::Symbol:
             /* <identifier> */
             return parse_nud_id();
@@ -683,19 +685,19 @@ class parser::imp {
         expr r;
         switch (curr()) {
         case scanner::token::Symbol:
-            if(curr_name() == "let") {
+            if (curr_name() == "let") {
                 /* ( let ( <var_binding>+ ) <term> ) */
                 r = parse_let();
-            } else if(curr_name() == "forall") {
+            } else if (curr_name() == "forall") {
                 /* ( forall ( <sorted_var>+ ) <term> ) */
                 r = parse_forall();
-            } else if(curr_name() == "exists") {
+            } else if (curr_name() == "exists") {
                 /* ( exists ( <sorted_var>+ ) <term> ) */
                 r = parse_exists();
-            } else if(curr_name() == "!") {
+            } else if (curr_name() == "!") {
                 /* ( ! <term> <attribute>+ ) */
                 std::tuple<name, sexpr> attr = parse_attribute();
-                // TODO r = std::get<1>(attr);
+                // TODO(soonho) r = std::get<1>(attr);
             } else {
                 /* ( <qual_identifier) (term)+ */
                 r = parse_nud_id();
@@ -789,7 +791,7 @@ class parser::imp {
         check_lparen_next("invalid token in declare-fun, '(' expected");
         buffer<expr> arg_sorts;
         /* process <sorts>* */
-        while(curr_is_symbol() || curr_is_lparen()) {
+        while (curr_is_symbol() || curr_is_lparen()) {
             expr sort = parse_sort();
             arg_sorts.push_back(sort);
         }
@@ -797,12 +799,12 @@ class parser::imp {
         expr ret_sort = parse_sort();
 
         unsigned n = arg_sorts.size();
-        while(n-- > 0) {
+        while (n-- > 0) {
             ret_sort = mk_arrow(arg_sorts[n], ret_sort);
         }
 
         m_frontend.add_var(id, ret_sort);
-        if(m_verbosity > 0)
+        if (m_verbosity > 0)
             regular(m_frontend) << " declare_fun " << id << " " << ret_sort << endl;
     }
 
@@ -835,7 +837,7 @@ class parser::imp {
         mk_scope scope(*this);
         bindings_buffer bindings;
         /* process <sorted_var>* */
-        while(curr_is_lparen()) {
+        while (curr_is_lparen()) {
             std::tuple<pos_info, name, expr, expr> binding = parse_sorted_var();
             bindings.push_back(binding);
             register_binding(std::get<1>(binding));
@@ -845,14 +847,14 @@ class parser::imp {
         expr body = parse_term();
 
         unsigned i = bindings.size();
-        while(i-- > 0) {
+        while (i-- > 0) {
             ret_sort = mk_arrow(std::get<2>(bindings[i]), ret_sort);
         }
 
         expr abs = mk_abstraction(true, bindings, body);
 
         m_frontend.add_definition(id, ret_sort, abs);
-        if(m_verbosity > 0)
+        if (m_verbosity > 0)
             regular(m_frontend) << " define-fun "
                                 << id << " : " << ret_sort
                                 << " = "<< abs << endl;
@@ -863,11 +865,11 @@ class parser::imp {
         name id = check_symbol_next("invalid sort declaration, identifier expected");
         expr type = Type();
         mpz n = int_value_numeral(parse_num());
-        while(n-- > 0) {
+        while (n-- > 0) {
             type = mk_arrow(Type(), type);
         }
         m_frontend.add_var(id, type);
-        if(m_verbosity > 0)
+        if (m_verbosity > 0)
             regular(m_frontend) << " declare-sort " << id << " : " << type << endl;
     }
     void parse_define_sort() {
@@ -879,7 +881,7 @@ class parser::imp {
         bindings_buffer bindings;
         /* process <symbols>* */
         mk_scope scope(*this);
-        while(curr_is_symbol()) {
+        while (curr_is_symbol()) {
             auto p = pos();
             name arg_name = check_symbol_next("invalid sort declaration, identifier expected");
             bindings.push_back(std::make_tuple(p, arg_name, Type(), Type()));
@@ -890,22 +892,21 @@ class parser::imp {
         /* process <sort> */
         expr s = Type();
         unsigned i = bindings.size();
-        while(i-- > 0) {
+        while (i-- > 0) {
             s = mk_arrow(Type(), s);
         }
 
-        if(m_verbosity > 0)
+        if (m_verbosity > 0)
             regular(m_frontend) << " define-sort "
                                 << id << " : " << s;
 
         expr body = parse_sort();
 
         expr abs = mk_abstraction(true, bindings, body);
-        if(m_verbosity > 0)
+        if (m_verbosity > 0)
             regular(m_frontend) << " = "<< abs << endl;
 
         m_frontend.add_definition(id, s, abs);
-
     }
     void parse_exit() {
         /* <command> ::= ( exit ) */
@@ -953,19 +954,19 @@ class parser::imp {
 
         const options & opt = m_frontend.get_state().get_options();
 
-        if(n == g_parser_print_success) { regular(m_frontend) << get_parser_print_success(opt) << endl; return; }
-        if(n == g_parser_expand_definitions ) { regular(m_frontend) << get_parser_expand_definitions(opt) << endl; return; }
-        if(n == g_parser_interactive_mode ) { regular(m_frontend) << get_parser_interactive_mode(opt) << endl; return; }
-        if(n == g_parser_produce_proofs ) { regular(m_frontend) << get_parser_produce_proofs(opt) << endl; return; }
-        if(n == g_parser_produce_unsat_cores ) { regular(m_frontend) << get_parser_produce_unsat_cores(opt) << endl; return; }
-        if(n == g_parser_produce_models ) { regular(m_frontend) << get_parser_produce_models(opt) << endl; return; }
-        if(n == g_parser_produce_assignments ) { regular(m_frontend) << get_parser_produce_assignments(opt) << endl; return; }
-        if(n == g_parser_regular_output_channel ) { regular(m_frontend) << get_parser_regular_output_channel(opt) << endl; return; }
-        if(n == g_parser_diagnostic_output_channel ) { regular(m_frontend) << get_parser_diagnostic_output_channel(opt) << endl; return; }
-        if(n == g_parser_random_seed ) { regular(m_frontend) << get_parser_random_seed(opt) << endl; return; }
-        if(n == g_parser_verbosity ) { regular(m_frontend) << get_parser_verbosity(opt) << endl; return; }
+        if (n == g_parser_print_success) { regular(m_frontend) << get_parser_print_success(opt) << endl; return; }
+        if (n == g_parser_expand_definitions ) { regular(m_frontend) << get_parser_expand_definitions(opt) << endl; return; }
+        if (n == g_parser_interactive_mode ) { regular(m_frontend) << get_parser_interactive_mode(opt) << endl; return; }
+        if (n == g_parser_produce_proofs ) { regular(m_frontend) << get_parser_produce_proofs(opt) << endl; return; }
+        if (n == g_parser_produce_unsat_cores ) { regular(m_frontend) << get_parser_produce_unsat_cores(opt) << endl; return; }
+        if (n == g_parser_produce_models ) { regular(m_frontend) << get_parser_produce_models(opt) << endl; return; }
+        if (n == g_parser_produce_assignments ) { regular(m_frontend) << get_parser_produce_assignments(opt) << endl; return; }
+        if (n == g_parser_regular_output_channel ) { regular(m_frontend) << get_parser_regular_output_channel(opt) << endl; return; }
+        if (n == g_parser_diagnostic_output_channel ) { regular(m_frontend) << get_parser_diagnostic_output_channel(opt) << endl; return; }
+        if (n == g_parser_random_seed ) { regular(m_frontend) << get_parser_random_seed(opt) << endl; return; }
+        if (n == g_parser_verbosity ) { regular(m_frontend) << get_parser_verbosity(opt) << endl; return; }
 
-        switch(k) {
+        switch (k) {
         case BoolOption:
             regular(m_frontend) << m_frontend.get_state().get_options().get_bool(n)
                                 << endl;
@@ -1018,10 +1019,10 @@ class parser::imp {
         next();
         mpz n = int_value_numeral(parse_num());
         lean_assert(n >= 0);
-        while(n-- > 0) {
+        while (n-- > 0) {
             lean_assert(m_frontend.has_parent());
             m_frontend = m_frontend.parent();
-            if(m_verbosity > 0)
+            if (m_verbosity > 0)
                 regular(m_frontend) << " (pop) " << endl;
         }
     }
@@ -1029,9 +1030,9 @@ class parser::imp {
         next();
         mpz n = int_value_numeral(parse_num());
         lean_assert(n >= 0);
-        while(n-- > 0) {
+        while (n-- > 0) {
             m_frontend = m_frontend.mk_child();
-            if(m_verbosity > 0)
+            if (m_verbosity > 0)
                 regular(m_frontend) << " (push) " << endl;
         }
     }
@@ -1056,7 +1057,7 @@ class parser::imp {
 
     expr parse_spec_constant() {
         /* <spec_constant> ::= <numeral> | <decimal> | <hexadecimal> | <binary> | <string>  */
-        switch(curr()) {
+        switch (curr()) {
         case scanner::token::NumVal:
             return parse_num();
         case scanner::token::DecVal:
@@ -1074,7 +1075,7 @@ class parser::imp {
 
     expr parse_sexpr() {
         /* <s_expr> ::= <spec_constant> | <symbol> | <keyword> | ( <s_expr>* ) */
-        switch(curr()) {
+        switch (curr()) {
         case scanner::token::NumVal:
         case scanner::token::DecVal:
         case scanner::token::HexVal:
@@ -1114,7 +1115,7 @@ class parser::imp {
     }
 
     option_kind extract_option_kind(sexpr & e) {
-        switch(e.kind()) {
+        switch (e.kind()) {
         case sexpr_kind::NIL:
         case sexpr_kind::CONS:
             return SExprOption;
@@ -1150,7 +1151,7 @@ class parser::imp {
         option_kind k = extract_option_kind(e);
 
         auto decl_it = get_option_declarations().find(n);
-        if(decl_it == get_option_declarations().end()) {
+        if (decl_it == get_option_declarations().end()) {
             // option is not registered
             mk_option_declaration(n, k, "false", "");
         } else {
@@ -1158,7 +1159,7 @@ class parser::imp {
             option_kind saved_kind = decl_it->second.kind();
             lean_assert(k == saved_kind);
         }
-        switch(k) {
+        switch (k) {
         case BoolOption:
             m_frontend.set_option(n, e.get_bool());
             break;
@@ -1187,26 +1188,48 @@ class parser::imp {
         check_symbol("invalid command, symbol expected");
 
         name const & cmd_id = curr_name();
-        if      (cmd_id == g_assert_kwd        ) parse_assert();
-        else if (cmd_id == g_check_sat_kwd     ) parse_check_sat();
-        else if (cmd_id == g_declare_fun_kwd   ) parse_declare_fun();
-        else if (cmd_id == g_declare_sort_kwd  ) parse_declare_sort();
-        else if (cmd_id == g_define_fun_kwd    ) parse_define_fun();
-        else if (cmd_id == g_define_sort_kwd   ) parse_define_sort();
-        else if (cmd_id == g_exit_kwd          ) parse_exit();
-        else if (cmd_id == g_get_assertions_kwd) parse_get_assertions();
-        else if (cmd_id == g_get_assignment_kwd) parse_get_assignment();
-        else if (cmd_id == g_get_info_kwd      ) parse_get_info();
-        else if (cmd_id == g_get_option_kwd    ) parse_get_option();
-        else if (cmd_id == g_get_proof_kwd     ) parse_get_proof();
-        else if (cmd_id == g_get_unsat_core_kwd) parse_get_unsat_core();
-        else if (cmd_id == g_get_value_kwd     ) parse_get_value();
-        else if (cmd_id == g_pop_kwd           ) parse_pop();
-        else if (cmd_id == g_push_kwd          ) parse_push();
-        else if (cmd_id == g_set_info_kwd      ) parse_set_info();
-        else if (cmd_id == g_set_logic_kwd     ) parse_set_logic();
-        else if (cmd_id == g_set_option_kwd    ) parse_set_option();
-        else { next(); throw parser_error(sstream() << "invalid command '" << cmd_id << "'", m_last_cmd_pos); }
+        if (cmd_id == g_assert_kwd) {
+            parse_assert();
+        } else if (cmd_id == g_check_sat_kwd) {
+            parse_check_sat();
+        } else if (cmd_id == g_declare_fun_kwd) {
+            parse_declare_fun();
+        } else if (cmd_id == g_declare_sort_kwd) {
+            parse_declare_sort();
+        } else if (cmd_id == g_define_fun_kwd) {
+            parse_define_fun();
+        } else if (cmd_id == g_define_sort_kwd) {
+            parse_define_sort();
+        } else if (cmd_id == g_exit_kwd) {
+            parse_exit();
+        } else if (cmd_id == g_get_assertions_kwd) {
+            parse_get_assertions();
+        } else if (cmd_id == g_get_assignment_kwd) {
+            parse_get_assignment();
+        } else if (cmd_id == g_get_info_kwd) {
+            parse_get_info();
+        } else if (cmd_id == g_get_option_kwd) {
+            parse_get_option();
+        } else if (cmd_id == g_get_proof_kwd) {
+            parse_get_proof();
+        } else if (cmd_id == g_get_unsat_core_kwd) {
+            parse_get_unsat_core();
+        } else if (cmd_id == g_get_value_kwd) {
+            parse_get_value();
+        } else if (cmd_id == g_pop_kwd) {
+            parse_pop();
+        } else if (cmd_id == g_push_kwd) {
+            parse_push();
+        } else if (cmd_id == g_set_info_kwd) {
+            parse_set_info();
+        } else if (cmd_id == g_set_logic_kwd) {
+            parse_set_logic();
+        } else if (cmd_id == g_set_option_kwd) {
+            parse_set_option();
+        } else {
+            next();
+            throw parser_error(sstream() << "invalid command '" << cmd_id << "'", m_last_cmd_pos);
+        }
 
         check_rparen_next("invalid command, ')' expected");
     }

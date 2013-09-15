@@ -8,10 +8,9 @@ Author: Soonho Kong
 #include <cstdio>
 #include <string>
 #include <algorithm>
-#include "smt_scanner.h"
-#include "trace.h"
-#include "debug.h"
-#include "exception.h"
+#include "util/debug.h"
+#include "util/exception.h"
+#include "frontends/smt/scanner.h"
 
 namespace lean {
 namespace smt {
@@ -117,10 +116,10 @@ void scanner::read_comment() {
     next();
     while (true) {
         char c = curr();
-        if(c == EOF) {
+        if (c == EOF) {
             return;
         }
-        if(c == '\n') {
+        if (c == '\n') {
             new_line();
             next();
             return;
@@ -138,14 +137,11 @@ scanner::token scanner::read_quoted_symbol() {
         char c = curr();
         if (c == EOF) {
             throw_exception("unexpected end of quoted symbol");
-        }
-        else if (c == '\n') {
+        } else if (c == '\n') {
             new_line();
-        }
-        else if (c == '|' && !escape) {
+        } else if (c == '|' && !escape) {
             next();
             m_name_val = name(m_buffer.c_str());
-            lean_trace("scanner", tout << "new quoted symbol: " << m_name_val << "\n";);
             return token::Symbol;
         }
         escape = (c == '\\');
@@ -161,10 +157,8 @@ scanner::token scanner::read_symbol_core() {
         if (n == 'a' || n == '0' || n == '-') {
             m_buffer += c;
             next();
-        }
-        else {
+        } else {
             m_name_val = name(m_buffer.c_str());
-            lean_trace("scanner", tout << "new symbol: " << m_name_val << "\n";);
             return token::Symbol;
         }
     }
@@ -197,7 +191,7 @@ bool is_digit_16(const char c) {
 
 template<typename F>
 scanner::token scanner::read_number_radix(unsigned int radix, F check, scanner::token ret) {
-    static_assert(std::is_same<F, bool(*)(char)>::value,
+    static_assert(std::is_same<F, bool(*)(char)>::value, // NOLINT
                   "smt::scanner::read_number_radix() is called with a wrong check function.");
     lean_assert(check(curr()));
     m_buffer.clear();
@@ -289,11 +283,10 @@ scanner::token scanner::scan() {
         case '0':  return read_number();
         case '#':
             next();
-            if(curr() == 'b') {
+            if (curr() == 'b') {
                 next();
                 return read_number_radix(2, is_digit_2, token::BinVal);
-            }
-            else if(curr() == 'x') {
+            } else if (curr() == 'x') {
                 next();
                 return read_number_radix(16, is_digit_16, token::HexVal);
             }

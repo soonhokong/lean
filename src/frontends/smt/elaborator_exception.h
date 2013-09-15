@@ -5,9 +5,10 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Author: Leonardo de Moura
 */
 #pragma once
-#include "smt_elaborator.h"
-#include "kernel_exception.h"
-#include "state.h"
+#include <vector>
+#include "kernel/kernel_exception.h"
+#include "library/state.h"
+#include "frontends/smt/elaborator.h"
 
 namespace lean {
 namespace smt {

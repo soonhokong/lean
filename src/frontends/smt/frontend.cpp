@@ -7,18 +7,21 @@ Author: Leonardo de Moura
 */
 #include <atomic>
 #include <unordered_set>
-#include "environment.h"
-#include "import_all.h"
-#include "map.h"
-#include "state.h"
-#include "sstream.h"
-#include "exception.h"
-#include "expr_pair.h"
-#include "smt_operator_info.h"
-#include "smt_coercion.h"
-#include "smt_frontend.h"
-#include "smt_notation.h"
-#include "smt_pp.h"
+#include <vector>
+#include <utility>
+#include <functional>
+#include "util/map.h"
+#include "util/sstream.h"
+#include "util/exception.h"
+#include "kernel/environment.h"
+#include "library/expr_pair.h"
+#include "library/state.h"
+#include "library/all/all.h"
+#include "frontends/smt/operator_info.h"
+#include "frontends/smt/coercion.h"
+#include "frontends/smt/frontend.h"
+#include "frontends/smt/notation.h"
+#include "frontends/smt/pp.h"
 
 namespace lean {
 namespace smt {

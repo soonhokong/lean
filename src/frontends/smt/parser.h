@@ -7,8 +7,8 @@ Author: Soonho Kong
 */
 #pragma once
 #include <iostream>
-#include "smt_frontend.h"
-#include "interruptable_ptr.h"
+#include "util/interruptable_ptr.h"
+#include "frontends/smt/frontend.h"
 
 namespace lean {
 namespace smt {

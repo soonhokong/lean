@@ -4,8 +4,9 @@ Released under Apache 2.0 license as described in the file LICENSE.
 
 Author: Leonardo de Moura
 */
-#include "smt_elaborator_exception.h"
-#include "smt_elaborator.h"
+#include <vector>
+#include "frontends/smt/elaborator_exception.h"
+#include "frontends/smt/elaborator.h"
 
 namespace lean {
 namespace smt {

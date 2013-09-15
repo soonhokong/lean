@@ -7,24 +7,26 @@ Author: Leonardo de Moura
 */
 #include <limits>
 #include <memory>
-#include "context.h"
-#include "scoped_map.h"
-#include "scoped_set.h"
-#include "for_each.h"
-#include "instantiate.h"
-#include "occurs.h"
-#include "builtin.h"
-#include "free_vars.h"
-#include "context_to_lambda.h"
-#include "options.h"
-#include "interruptable_ptr.h"
-#include "metavar.h"
-#include "exception.h"
-#include "smt_notation.h"
-#include "smt_pp.h"
-#include "smt_frontend.h"
-#include "smt_coercion.h"
-#include "smt_elaborator.h"
+#include <utility>
+#include <vector>
+#include "util/scoped_map.h"
+#include "util/exception.h"
+#include "util/scoped_set.h"
+#include "util/sexpr/options.h"
+#include "util/interruptable_ptr.h"
+#include "kernel/context.h"
+#include "kernel/for_each.h"
+#include "kernel/instantiate.h"
+#include "kernel/occurs.h"
+#include "kernel/builtin.h"
+#include "kernel/free_vars.h"
+#include "library/context_to_lambda.h"
+#include "library/metavar.h"
+#include "frontends/smt/notation.h"
+#include "frontends/smt/pp.h"
+#include "frontends/smt/frontend.h"
+#include "frontends/smt/coercion.h"
+#include "frontends/smt/elaborator.h"
 
 #ifndef SMT_DEFAULT_PP_MAX_DEPTH
 #define SMT_DEFAULT_PP_MAX_DEPTH std::numeric_limits<unsigned>::max()
@@ -174,7 +176,7 @@ class pp_fn {
     typedef std::pair<format, unsigned> result;
 
     bool is_coercion(expr const & e) {
-        return is_app(e) && num_args(e) == 2 && m_frontend.is_coercion(arg(e,0));
+        return is_app(e) && num_args(e) == 2 && m_frontend.is_coercion(arg(e, 0));
     }
 
     /**
@@ -186,7 +188,7 @@ class pp_fn {
             return true;
         case expr_kind::App:
             if (!m_coercion && is_coercion(e))
-                return is_atomic(arg(e,1));
+                return is_atomic(arg(e, 1));
             else
                 return false;
         case expr_kind::Lambda: case expr_kind::Pi: case expr_kind::Eq: case expr_kind::Let:
@@ -321,7 +323,7 @@ class pp_fn {
             head = is_forall ? g_forall_fmt : g_exists_fmt;
         format sep  = comma();
         expr domain0 = nested[0].second;
-        // TODO: the following code is very similar to pp_abstraction
+        // TODO(Soonho): the following code is very similar to pp_abstraction
         if (std::all_of(nested.begin() + 1, nested.end(), [&](std::pair<name, expr> const & p) { return p.second == domain0; })) {
             // Domain of all binders is the same
             format names    = pp_bnames(nested.begin(), nested.end(), false);
@@ -490,7 +492,7 @@ class pp_fn {
 
         application(expr const & e, pp_fn const & owner, bool show_implicit):m_app(e) {
             frontend const & fe = owner.m_frontend;
-            expr const & f = arg(e,0);
+            expr const & f = arg(e, 0);
             if (is_constant(f) && owner.has_implicit_arguments(const_name(f))) {
                 m_implicit_args = &(fe.get_implicit_arguments(const_name(f)));
                 if (show_implicit || num_args(e) - 1 < m_implicit_args->size()) {
@@ -576,7 +578,7 @@ class pp_fn {
     */
     result pp_app(expr const & e, unsigned depth) {
         if (!m_coercion && is_coercion(e))
-            return pp(arg(e,1), depth);
+            return pp(arg(e, 1), depth);
         application app(e, *this, m_implict);
         operator_info op;
         if (m_notation && app.notation_enabled() && (op = get_operator(e)) && has_expected_num_args(app, op)) {
@@ -650,7 +652,7 @@ class pp_fn {
         } else {
             // standard function application
             expr const & f  = app.get_function();
-            result p        = is_constant(f) && !is_metavar(f) ? mk_result(format(const_name(f)),1) : pp_child(f, depth);
+            result p        = is_constant(f) && !is_metavar(f) ? mk_result(format(const_name(f)), 1) : pp_child(f, depth);
             bool simple     = is_constant(f) && !is_metavar(f) && const_name(f).size() <= m_indent + 4;
             unsigned indent = simple ? const_name(f).size()+1 : m_indent;
             format   r_format = p.first;
@@ -956,7 +958,7 @@ class pp_fn {
             result r;
             if (is_choice(e)) {
                 return pp_choice(e, depth);
-            } if (is_lower(e)) {
+            } else if (is_lower(e)) {
                 r = pp_lower(e, depth);
             } else if (is_lift(e)) {
                 r = pp_lift(e, depth);
@@ -1019,11 +1021,11 @@ class pp_fn {
     }
 
     name find_unused_prefix(expr const & e) {
-        if (!uses_prefix(e, g_kappa))
+        if (!uses_prefix(e, g_kappa)) {
             return g_kappa;
-        else if (!uses_prefix(e, g_pho))
+        } else if (!uses_prefix(e, g_pho)) {
             return g_pho;
-        else {
+        } else {
             unsigned i = 1;
             name n(g_nu, i);
             while (uses_prefix(e, n)) {

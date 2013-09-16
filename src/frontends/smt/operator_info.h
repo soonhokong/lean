@@ -17,6 +17,19 @@ namespace smt {
 /**
    \brief Operator fixity.
    Prefix:   ID _
+   Prefixl:  ID _ _  (left associative)
+             (+ a b c d)        ==> (+ (+ (+ a b) c) d)
+   Prefixr:  ID _ _  (right associative)
+             (=> a b c d)       ==> (=> a (=> b (=> c d)))
+   Prefixc:  ID _ _  (chainable)
+             (= a b c d)        ==> (and (= a b) (= b c) (= c d))
+   Prefixp:  ID _ _  (pairwise)
+             (distinct a b c d) ==> (and (distinct a b)
+                                         (distinct a c)
+                                         (distinct a d)
+                                         (distinct b c)
+                                         (distinct b d)
+                                         (distinct c d))
    Infix:    _ ID _
    Infixl:    _ ID _    (left associative)
    Infixr:    _ ID _    (right associative)
@@ -26,7 +39,7 @@ namespace smt {
    Mixfixc: ID _ ID _ ... ID _ ID    (has at least two parts)
    Mixfixo:  _ ID _ ... ID _         (has at least two parts)
 */
-enum class fixity { Prefix, Infix, Infixl, Infixr, Postfix, Mixfixl, Mixfixr, Mixfixc, Mixfixo };
+enum class fixity { Prefix, Prefixl, Prefixr, Prefixc, Prefixp, Infix, Infixl, Infixr, Postfix, Mixfixl, Mixfixr, Mixfixc, Mixfixo };
 
 /**
    \brief Data-structure for storing user defined operator
@@ -54,6 +67,10 @@ public:
     friend operator_info infixl(name const & op, unsigned precedence);
     friend operator_info infixr(name const & op, unsigned precedence);
     friend operator_info prefix(name const & op, unsigned precedence);
+    friend operator_info prefixl(name const & op, unsigned precedence);
+    friend operator_info prefixr(name const & op, unsigned precedence);
+    friend operator_info prefixc(name const & op, unsigned precedence);
+    friend operator_info prefixp(name const & op, unsigned precedence);
     friend operator_info postfix(name const & op, unsigned precedence);
     friend operator_info mixfixl(unsigned num_parts, name const * parts, unsigned precedence);
     friend operator_info mixfixr(unsigned num_parts, name const * parts, unsigned precedence);
@@ -99,6 +116,10 @@ operator_info infix(name const & op, unsigned precedence);
 operator_info infixl(name const & op, unsigned precedence);
 operator_info infixr(name const & op, unsigned precedence);
 operator_info prefix(name const & op, unsigned precedence);
+operator_info prefixl(name const & op, unsigned precedence);
+operator_info prefixr(name const & op, unsigned precedence);
+operator_info prefixc(name const & op, unsigned precedence);
+operator_info prefixp(name const & op, unsigned precedence);
 operator_info postfix(name const & op, unsigned precedence);
 operator_info mixfixl(unsigned num_parts, name const * parts, unsigned precedence);
 operator_info mixfixr(unsigned num_parts, name const * parts, unsigned precedence);

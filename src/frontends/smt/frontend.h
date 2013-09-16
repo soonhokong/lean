@@ -83,6 +83,10 @@ public:
     void add_infixl(name const & opn, unsigned precedence, expr const & d);
     void add_infixr(name const & opn, unsigned precedence, expr const & d);
     void add_prefix(name const & opn, unsigned precedence, expr const & d);
+    void add_prefixl(name const & opn, unsigned precedence, expr const & d);
+    void add_prefixr(name const & opn, unsigned precedence, expr const & d);
+    void add_prefixc(name const & opn, unsigned precedence, expr const & d);
+    void add_prefixp(name const & opn, unsigned precedence, expr const & d);
     void add_postfix(name const & opn, unsigned precedence, expr const & d);
     void add_mixfixl(unsigned sz, name const * opns, unsigned precedence, expr const & d);
     void add_mixfixr(unsigned sz, name const * opns, unsigned precedence, expr const & d);

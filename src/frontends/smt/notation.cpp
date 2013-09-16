@@ -19,18 +19,22 @@ namespace smt {
 void init_builtin_notation(frontend & f) {
     std::cerr << "Add init builtin notations" << std::endl;
     f.add_prefix("not", 40, mk_not_fn());
-    f.add_prefix("and", 35, mk_and_fn());
-    f.add_prefix("or",  30, mk_or_fn());
-    f.add_prefix("=>",  25, mk_implies_fn());
+    f.add_prefixl("and", 35, mk_and_fn());
+    f.add_prefixl("or",  30, mk_or_fn());
+    //f.add_prefix("xor",  30, mk_xor_fn());
+    f.add_prefixr("=>",  25, mk_implies_fn());
+    //f.add_prefix?("ite",  25, mk_ite_fn());
+    //f.add_prefixc("=",  25, mk_eq_fn());
+    //f.add_prefixp("distinct",  25, mk_distinct_fn());
 
-    f.add_prefix("<", 50, mk_nat_lt_fn());
-    f.add_prefix(">", 50, mk_nat_gt_fn());
-    f.add_prefix("<=", 50, mk_nat_le_fn());
-    f.add_prefix(">=", 50, mk_nat_ge_fn());
+    f.add_prefixc("<", 50, mk_nat_lt_fn());
+    f.add_prefixc(">", 50, mk_nat_gt_fn());
+    f.add_prefixc("<=", 50, mk_nat_le_fn());
+    f.add_prefixc(">=", 50, mk_nat_ge_fn());
 
-    f.add_prefix("+", 65, mk_nat_add_fn());
-    f.add_prefix("-", 65, mk_nat_sub_fn());
-    f.add_prefix("*", 70, mk_nat_mul_fn());
+    f.add_prefixl("+", 65, mk_nat_add_fn());
+    f.add_prefixl("-", 65, mk_nat_sub_fn());
+    f.add_prefixl("*", 70, mk_nat_mul_fn());
 }
 
 void init_theory_ArrayEx(frontend & f) {

@@ -93,6 +93,18 @@ operator_info infixl(name const & op, unsigned precedence) {
 operator_info prefix(name const & op, unsigned precedence) {
     return operator_info(new operator_info::imp(op, fixity::Prefix, precedence));
 }
+operator_info prefixl(name const & op, unsigned precedence) {
+    return operator_info(new operator_info::imp(op, fixity::Prefixl, precedence));
+}
+operator_info prefixr(name const & op, unsigned precedence) {
+    return operator_info(new operator_info::imp(op, fixity::Prefixr, precedence));
+}
+operator_info prefixc(name const & op, unsigned precedence) {
+    return operator_info(new operator_info::imp(op, fixity::Prefixc, precedence));
+}
+operator_info prefixp(name const & op, unsigned precedence) {
+    return operator_info(new operator_info::imp(op, fixity::Prefixp, precedence));
+}
 operator_info postfix(name const & op, unsigned precedence) {
     return operator_info(new operator_info::imp(op, fixity::Postfix, precedence));
 }
@@ -115,6 +127,10 @@ char const * to_string(fixity f) {
     case fixity::Infixl:  return "Infixl";
     case fixity::Infixr:  return "Infixr";
     case fixity::Prefix:  return "Prefix";
+    case fixity::Prefixl: return "Prefixl";
+    case fixity::Prefixr: return "Prefixr";
+    case fixity::Prefixc: return "Prefixc";
+    case fixity::Prefixp: return "Prefixp";
     case fixity::Postfix: return "Postfix";
     case fixity::Mixfixl: return "Mixfixl";
     case fixity::Mixfixr: return "Mixfixr";
@@ -131,6 +147,10 @@ format pp(operator_info const & o) {
     case fixity::Infix:
     case fixity::Infixl:
     case fixity::Infixr:
+    case fixity::Prefixl:
+    case fixity::Prefixr:
+    case fixity::Prefixc:
+    case fixity::Prefixp:
         r = highlight_command(format(to_string(o.get_fixity())));
         if (o.get_precedence() > 1)
             r += format{space(), format(o.get_precedence())};

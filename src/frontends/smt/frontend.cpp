@@ -217,6 +217,10 @@ struct frontend::imp {
     void add_infixl(name const & opn, unsigned p, expr const & d) { add_op(infixl(opn, p), d, true); }
     void add_infixr(name const & opn, unsigned p, expr const & d) { add_op(infixr(opn, p), d, true); }
     void add_prefix(name const & opn, unsigned p, expr const & d) { add_op(prefix(opn, p), d, false); }
+    void add_prefixl(name const & opn, unsigned p, expr const & d) { add_op(prefixl(opn, p), d, false); }
+    void add_prefixr(name const & opn, unsigned p, expr const & d) { add_op(prefixr(opn, p), d, false); }
+    void add_prefixc(name const & opn, unsigned p, expr const & d) { add_op(prefixc(opn, p), d, false); }
+    void add_prefixp(name const & opn, unsigned p, expr const & d) { add_op(prefixp(opn, p), d, false); }
     void add_postfix(name const & opn, unsigned p, expr const & d) { add_op(postfix(opn, p), d, true); }
     void add_mixfixl(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixl(sz, opns, p), d, false); }
     void add_mixfixr(unsigned sz, name const * opns, unsigned p, expr const & d) { add_op(mixfixr(sz, opns, p), d, true);  }
@@ -407,6 +411,10 @@ void frontend::add_infix(name const & opn, unsigned p, expr const & d)  { m_imp-
 void frontend::add_infixl(name const & opn, unsigned p, expr const & d)  { m_imp->add_infixl(opn, p, d); }
 void frontend::add_infixr(name const & opn, unsigned p, expr const & d)  { m_imp->add_infixr(opn, p, d); }
 void frontend::add_prefix(name const & opn, unsigned p, expr const & d)  { m_imp->add_prefix(opn, p, d); }
+void frontend::add_prefixl(name const & opn, unsigned p, expr const & d) { m_imp->add_prefixl(opn, p, d); }
+void frontend::add_prefixr(name const & opn, unsigned p, expr const & d) { m_imp->add_prefixr(opn, p, d); }
+void frontend::add_prefixc(name const & opn, unsigned p, expr const & d) { m_imp->add_prefixc(opn, p, d); }
+void frontend::add_prefixp(name const & opn, unsigned p, expr const & d) { m_imp->add_prefixp(opn, p, d); }
 void frontend::add_postfix(name const & opn, unsigned p, expr const & d) { m_imp->add_postfix(opn, p, d); }
 void frontend::add_mixfixl(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixl(sz, opns, p, d); }
 void frontend::add_mixfixr(unsigned sz, name const * opns, unsigned p, expr const & d) { m_imp->add_mixfixr(sz, opns, p, d); }

@@ -579,6 +579,8 @@ class pp_fn {
             return app.get_num_args() == 2;
         case fixity::Prefix: case fixity::Postfix:
             return app.get_num_args() == 1;
+        case fixity::Prefixl: case fixity::Prefixr: case fixity::Prefixc: case fixity::Prefixp:
+            return app.get_num_args() == 2;
         case fixity::Mixfixl: case fixity::Mixfixr:
             return app.get_num_args() == length(op.get_op_name_parts());
         case fixity::Mixfixc:

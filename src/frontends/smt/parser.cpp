@@ -592,6 +592,7 @@ class parser::imp {
         return mk_application(op, pos, l.size(), l.begin());
     }
     expr mk_application(operator_info const & op, pos_info const & pos, expr const & arg) {
+        std::cout << "mk_application " << op.get_op_name() << " + " << arg << std::endl;
         return mk_application(op, pos, 1, &arg);
     }
     expr mk_application(operator_info const & op, pos_info const & pos, buffer<expr> const & args) {
@@ -600,34 +601,224 @@ class parser::imp {
 
     /** \brief Parse a user defined prefix operator. */
     expr parse_prefix(operator_info const & op) {
-        std::cerr << "parse_prefix : " << op << std::endl;
+        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
         auto p = pos();
-        return mk_application(op, p, parse_term(op.get_precedence()));
+        auto t = parse_term(op.get_precedence());
+        std::cout << "parse_prefix : term = " << t << std::endl;
+        return mk_application(op, p, t);
     }
 
+    /** \brief Parse a user defined prefix operator. */
+    expr parse_prefixl(operator_info const & op) {
+        // TODO(soonho)
+        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        auto p = pos();
+        auto t = parse_term(op.get_precedence());
+        std::cout << "parse_prefix : term = " << t << std::endl;
+        return mk_application(op, p, t);
+    }
+
+    /** \brief Parse a user defined prefix operator. */
+    expr parse_prefixr(operator_info const & op) {
+        // TODO(soonho)
+        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        auto p = pos();
+        auto t = parse_term(op.get_precedence());
+        std::cout << "parse_prefix : term = " << t << std::endl;
+        return mk_application(op, p, t);
+    }
+
+    /** \brief Parse a user defined prefix operator. */
+    expr parse_prefixc(operator_info const & op) {
+        // TODO(soonho)
+        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        auto p = pos();
+        auto t = parse_term(op.get_precedence());
+        std::cout << "parse_prefix : term = " << t << std::endl;
+        return mk_application(op, p, t);
+    }
+
+    /** \brief Parse a user defined prefix operator. */
+    expr parse_prefixp(operator_info const & op) {
+        // TODO(soonho)
+        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        auto p = pos();
+        auto t = parse_term(op.get_precedence());
+        std::cout << "parse_prefix : term = " << t << std::endl;
+        return mk_application(op, p, t);
+    }
+
+    /** \brief Parse a user defined postfix operator. */
+    expr parse_postfix(expr const & left, operator_info const & op) {
+        return mk_application(op, pos(), left);
+    }
+
+    /** \brief Parse a user defined infix operator. */
+    expr parse_infix(expr const & left, operator_info const & op) {
+        auto p = pos();
+        return mk_application(op, p, {left, parse_term(op.get_precedence()+1)});
+    }
+
+    /** \brief Parse a user defined infix-left operator. */
+    expr parse_infixl(expr const & left, operator_info const & op) {
+        auto p = pos();
+        return mk_application(op, p, {left, parse_term(op.get_precedence())});
+    }
+
+    /** \brief Parse a user defined infix-right operator. */
+    expr parse_infixr(expr const & left, operator_info const & op) {
+        auto p = pos();
+        return mk_application(op, p, {left, parse_term(op.get_precedence()-1)});
+    }
+
+    /**
+        \brief Throws an error if the current token is not an identifier named \c op_part.
+        If it is, move to the next toke. The error message assumes
+        this method has been used when parsing mixfix operators.
+    */
+    void check_op_part(name const & op_part) {
+        if (!curr_is_symbol() || curr_name() != op_part)
+            throw parser_error(sstream() << "invalid mixfix operator application, '" << op_part << "' expected", pos());
+        next();
+    }
+
+    /**
+        \brief Auxiliary function for #parse_mixfixl and #parse_mixfixo
+
+        It parses (ID _)*
+    */
+    void parse_mixfix_args(list<name> const & ops, unsigned prec, buffer<expr> & args) {
+        auto it = ops.begin();
+        ++it;
+        while (it != ops.end()) {
+            check_op_part(*it);
+            args.push_back(parse_term(prec));
+            ++it;
+        }
+    }
+
+    /** \brief Parse user defined mixfixl operator. It has the form: ID _ ... ID _ */
+    expr parse_mixfixl(operator_info const & op) {
+        auto p = pos();
+        buffer<expr> args;
+        args.push_back(parse_term(op.get_precedence()));
+        parse_mixfix_args(op.get_op_name_parts(), op.get_precedence(), args);
+        return mk_application(op, p, args);
+    }
+
+    /** \brief Parse user defined mixfixr operator. It has the form: _ ID ... _ ID */
+    expr parse_mixfixr(expr const & left, operator_info const & op) {
+        auto p = pos();
+        buffer<expr> args;
+        args.push_back(left);
+        auto parts = op.get_op_name_parts();
+        auto it = parts.begin();
+        ++it;
+        while (it != parts.end()) {
+            args.push_back(parse_term(op.get_precedence()));
+            check_op_part(*it);
+            ++it;
+        }
+        return mk_application(op, p, args);
+    }
+
+    /** \brief Parse user defined mixfixr operator. It has the form: _ ID ... _ ID _ */
+    expr parse_mixfixo(expr const & left, operator_info const & op) {
+        auto p = pos();
+        buffer<expr> args;
+        args.push_back(left);
+        args.push_back(parse_term(op.get_precedence()));
+        parse_mixfix_args(op.get_op_name_parts(), op.get_precedence(), args);
+        return mk_application(op, p, args);
+    }
+
+    /** \brief Parse user defined mixfixc operator. It has the form: ID _ ID ... _ ID */
+    expr parse_mixfixc(operator_info const & op) {
+        auto p = pos();
+        buffer<expr> args;
+        args.push_back(parse_term(op.get_precedence()));
+        list<name> const & ops = op.get_op_name_parts();
+        auto it = ops.begin();
+        ++it;
+        while (true) {
+            check_op_part(*it);
+            ++it;
+            if (it == ops.end())
+                return mk_application(op, p, args);
+            args.push_back(parse_term(op.get_precedence()));
+        }
+    }
+
+    /**
+        \brief Parse an identifier that has a "null denotation" (See
+        paper: "Top down operator precedence"). A nud identifier is a
+        token that appears at the beginning of a language construct.
+        In Lean, local declarations (i.e., local functions), user
+        defined prefix, mixfixl and mixfixc operators, and global
+        functions can begin a language construct.
+    */
     expr parse_nud_id() {
         auto p = pos();
         name id = curr_name();
-        std::cerr << "parse_nud_id + " << id << std::endl;
+        next();
+        std::cout << "parse_nud_id: " << id << std::endl;
+        auto it = m_local_decls.find(id);
+        if (it != m_local_decls.end()) {
+            std::cout << "parse_nud_id: " << id << " found in local decls" << std::endl;
+            return save(mk_var(m_num_local_decls - it->second - 1), p);
+        } else {
+            std::cout << "parse_nud_id: " << id << " not found in local decls" << std::endl;
+            operator_info op = m_frontend.find_nud(id);
+            if (op) {
+                std::cout << "parse_nud_id: " << id << " is operator" << std::endl;
+                switch (op.get_fixity()) {
+                case fixity::Prefix:
+                    std::cout << "parse_nud_id: " << id << " is prefix operator" << std::endl;
+                    return parse_prefix(op);
+                case fixity::Mixfixl: return parse_mixfixl(op);
+                case fixity::Mixfixc: return parse_mixfixc(op);
+                default:
+                    std::cout << "parse_nud_id: " << id << " something is wrong" << std::endl;
+                    lean_unreachable(); return expr();
+                }
+            } else {
+                std::cout << "parse_nud_id: " << id << " is not an operator" << std::endl;
+                return save(get_name_ref(id, p), p);
+            }
+        }
+    }
+
+    /**
+        \brief Parse an identifier that has a "left denotation" (See
+        paper: "Top down operator precedence"). A left identifier is a
+        token that appears inside of a construct (to left of the rest
+        of the construct). In Lean, local declarations (i.e., function
+        application arguments), user defined infix, infixl, infixr,
+        mixfixr and global values (as function application arguments)
+        can appear inside of a construct.
+    */
+    expr parse_led_id(expr const & left) {
+        auto p  = pos();
+        auto p2 = pos_of(left, p);
+        name id = curr_name();
         next();
         auto it = m_local_decls.find(id);
         if (it != m_local_decls.end()) {
-            std::cerr << "parse_nud_id - found in local_decls" << std::endl;
-            return save(mk_var(m_num_local_decls - it->second - 1), p);
+            return save(mk_app(left, save(mk_var(m_num_local_decls - it->second - 1), p)), p2);
         } else {
-            std::cerr << "parse_nud_id - not found in local_decls" << std::endl;
-            operator_info op = m_frontend.find_nud(id);
+            operator_info op = m_frontend.find_led(id);
             if (op) {
-                std::cerr << "parse_nud_id - " << op << " is in frontend" << std::endl;
                 switch (op.get_fixity()) {
-                case fixity::Prefix:  return parse_prefix(op);
-//                case fixity::Mixfixl: return parse_mixfixl(op);
-//                case fixity::Mixfixc: return parse_mixfixc(op);
+                // case fixity::Infix:   return parse_infix(left, op);
+                // case fixity::Infixl:  return parse_infixl(left, op);
+                // case fixity::Infixr:  return parse_infixr(left, op);
+                // case fixity::Mixfixr: return parse_mixfixr(left, op);
+                // case fixity::Mixfixo: return parse_mixfixo(left, op);
+                // case fixity::Postfix: return parse_postfix(left, op);
                 default: lean_unreachable(); return expr();
                 }
             } else {
-                std::cerr << "parse_nud_id - " << id << " is not in frontend" << std::endl;
-                return save(get_name_ref(id, p), p);
+                return save(mk_app(left, save(get_name_ref(id, p), p)), p2);
             }
         }
     }
@@ -722,22 +913,76 @@ class parser::imp {
        \brief Auxiliary method used when processing the beginning of an expression.
     */
     expr parse_nud() {
+        std::cout << "parse_nud : " << curr() << std::endl;
         switch (curr()) {
-        case scanner::token::NumVal: return parse_num();
-        case scanner::token::BinVal: return parse_bin();
-        case scanner::token::HexVal: return parse_hex();
-        case scanner::token::DecVal: return parse_dec();
+        case scanner::token::NumVal:    return parse_num();
+        case scanner::token::BinVal:    return parse_bin();
+        case scanner::token::HexVal:    return parse_hex();
+        case scanner::token::DecVal:    return parse_dec();
         case scanner::token::StringVal: return parse_string();
-        case scanner::token::LeftParen:  return parse_lparen();
-        case scanner::token::Symbol: return parse_nud_id();
+        case scanner::token::LeftParen: return parse_lparen();
+        case scanner::token::Symbol:    return parse_nud_id();
         default:
             throw parser_error("unexpected token in parse_nud()", pos());
+        }
+    }
+
+    /**
+       \brief Create a new application and associate position of left with the resultant expression.
+    */
+    expr mk_app_left(expr const & left, expr const & arg) {
+        auto it = m_expr_pos_info.find(left);
+        lean_assert(it != m_expr_pos_info.end());
+        return save(mk_app(left, arg), it->second);
+    }
+
+    /**
+       \brief Auxiliary method used when processing the 'inside' of an expression.
+    */
+    expr parse_led(expr const & left) {
+        std::cout << "parse_led : " << curr() << std::endl;
+        switch (curr()) {
+        case scanner::token::Symbol:    return parse_led_id(left);
+        case scanner::token::LeftParen: return mk_app_left(left, parse_lparen());
+        case scanner::token::NumVal:    return mk_app_left(left, parse_num());
+        case scanner::token::HexVal:    return mk_app_left(left, parse_hex());
+        case scanner::token::BinVal:    return mk_app_left(left, parse_bin());
+        case scanner::token::DecVal:    return mk_app_left(left, parse_dec());
+        case scanner::token::StringVal: return mk_app_left(left, parse_string());
+        default:                        return left;
+        }
+    }
+
+    /** \brief Return the binding power of the current token (when parsing expression). */
+    unsigned curr_lbp() {
+        switch (curr()) {
+        case scanner::token::Symbol: {
+            name const & id = curr_name();
+            auto it = m_local_decls.find(id);
+            if (it != m_local_decls.end()) {
+                return 1;
+            } else {
+                operator_info op = m_frontend.find_led(id);
+                if (op)
+                    return op.get_precedence();
+                else
+                    return 1;
+            }
+        }
+        case scanner::token::LeftParen: case scanner::token::NumVal: case scanner::token::DecVal:
+        case scanner::token::BinVal:    case scanner::token::HexVal: case scanner::token::StringVal:
+            return 1;
+        default:
+            return 0;
         }
     }
 
     expr parse_term(unsigned rbp = 0) {
         std::cout << "parse_term" << std::endl;
         expr left = parse_nud();
+        while (rbp < curr_lbp()) {
+            left = parse_led(left);
+        }
         return left;
     }
 

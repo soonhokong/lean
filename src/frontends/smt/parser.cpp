@@ -30,7 +30,7 @@ Author: Soonho Kong
 #include "library/printer.h"
 #include "library/state.h"
 #include "library/kernel_exception_formatter.h"
-#include "library/metavar.h"
+#include "library/placeholder.h"
 #include "frontends/smt/frontend.h"
 #include "frontends/smt/elaborator.h"
 #include "frontends/smt/elaborator_exception.h"
@@ -194,16 +194,16 @@ class parser::imp {
     interruptable_ptr<normalizer> m_normalizer;
 
     bool           m_show_errors;
-    bool           m_print_success;
-    bool           m_expand_definitions;
-    bool           m_interactive_mode;
-    bool           m_produce_proofs;
-    bool           m_produce_unsat_cores;
-    bool           m_produce_models;
-    bool           m_produce_assignments;
+    // bool           m_print_success;
+    // bool           m_expand_definitions;
+    // bool           m_interactive_mode;
+    // bool           m_produce_proofs;
+    // bool           m_produce_unsat_cores;
+    // bool           m_produce_models;
+    // bool           m_produce_assignments;
     std::string    m_regular_output_channel;
     std::string    m_diagnostic_output_channel;
-    int            m_random_seed;
+    // int            m_random_seed;
     int            m_verbosity;
 
     /** \brief Exception used to track parsing erros, it does not leak outside of this class. */

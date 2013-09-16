@@ -21,7 +21,7 @@ Author: Leonardo de Moura
 #include "kernel/builtin.h"
 #include "kernel/free_vars.h"
 #include "library/context_to_lambda.h"
-#include "library/metavar.h"
+#include "library/placeholder.h"
 #include "frontends/smt/notation.h"
 #include "frontends/smt/pp.h"
 #include "frontends/smt/frontend.h"
@@ -36,16 +36,16 @@ Author: Leonardo de Moura
 #define SMT_DEFAULT_PP_MAX_STEPS std::numeric_limits<unsigned>::max()
 #endif
 
+#ifndef SMT_DEFAULT_PP_NOTATION
+#define SMT_DEFAULT_PP_NOTATION true
+#endif
+
 #ifndef SMT_DEFAULT_PP_IMPLICIT
 #define SMT_DEFAULT_PP_IMPLICIT false
 #endif
 
 #ifndef SMT_DEFAULT_PP_COERCION
 #define SMT_DEFAULT_PP_COERCION false
-#endif
-
-#ifndef SMT_DEFAULT_PP_NOTATION
-#define SMT_DEFAULT_PP_NOTATION true
 #endif
 
 #ifndef SMT_DEFAULT_PP_EXTRA_LETS
@@ -79,7 +79,6 @@ static format g_geq_fmt       = format("\u2265");
 static format g_lift_fmt      = highlight_keyword(format("lift"));
 static format g_lower_fmt     = highlight_keyword(format("lower"));
 static format g_subst_fmt     = highlight_keyword(format("subst"));
-
 
 static name g_pp_max_depth       {"lean", "pp", "max_depth"};
 static name g_pp_max_steps       {"lean", "pp", "max_steps"};
@@ -186,6 +185,8 @@ class pp_fn {
         switch (e.kind()) {
         case expr_kind::Var: case expr_kind::Constant: case expr_kind::Value: case expr_kind::Type:
             return true;
+        case expr_kind::MetaVar:
+            return !metavar_ctx(e);
         case expr_kind::App:
             if (!m_coercion && is_coercion(e))
                 return is_atomic(arg(e, 1));
@@ -218,8 +219,6 @@ class pp_fn {
         name const & n = const_name(e);
         if (is_placeholder(e)) {
             return mk_result(format("_"), 1);
-        } else if (is_metavar(e)) {
-            return mk_result(format{format("?M"), format(metavar_idx(e))}, 1);
         } else if (has_implicit_arguments(n)) {
             return mk_result(format(m_frontend.get_explicit_version(n)), 1);
         } else {
@@ -323,7 +322,7 @@ class pp_fn {
             head = is_forall ? g_forall_fmt : g_exists_fmt;
         format sep  = comma();
         expr domain0 = nested[0].second;
-        // TODO(Soonho): the following code is very similar to pp_abstraction
+        // TODO(Leo): the following code is very similar to pp_abstraction
         if (std::all_of(nested.begin() + 1, nested.end(), [&](std::pair<name, expr> const & p) { return p.second == domain0; })) {
             // Domain of all binders is the same
             format names    = pp_bnames(nested.begin(), nested.end(), false);
@@ -518,7 +517,24 @@ class pp_fn {
             if (m_implicit_args) {
                 unsigned r = 0;
                 for (unsigned i = 0; i < num_args(m_app) - 1; i++) {
-                    if (!(*m_implicit_args)[i])
+                    // Remark: we need the test i >= m_implicit_args because the application
+                    // m_app may contain more arguments than the declaration of m_f.
+                    // Example:
+                    // m_f was declared as
+                    //     Pi {A : Type} (a : A) : A
+                    // Thus m_implicit_args has size 2, and contains {true, false}
+                    // indicating that the first argument is implicit.
+                    // Then, the actuall application is:
+                    //    f (Int -> Int) g 10
+                    // Assuming g has type Int -> Int.
+                    // This application is fine and has type Int.
+                    // We should not print the argument (Int -> Int) since it is
+                    // implicit.
+                    // We should view the application above as:
+                    //   (f (Int -> Int) g) 10
+                    // So, the arguments at position >= m_implicit_args->size()
+                    // are explicit by default.
+                    if (i >= m_implicit_args->size() || !(*m_implicit_args)[i])
                         r++;
                 }
                 return r;
@@ -532,7 +548,8 @@ class pp_fn {
             if (m_implicit_args) {
                 unsigned n = num_args(m_app);
                 for (unsigned j = 1; j < n; j++) {
-                    if (!(*m_implicit_args)[j-1]) {
+                    // See comment in get_num_args()
+                    if (j - 1 >= m_implicit_args->size() || !(*m_implicit_args)[j-1]) {
                         // explicit argument found
                         if (i == 0)
                             return arg(m_app, j);
@@ -652,8 +669,8 @@ class pp_fn {
         } else {
             // standard function application
             expr const & f  = app.get_function();
-            result p        = is_constant(f) && !is_metavar(f) ? mk_result(format(const_name(f)), 1) : pp_child(f, depth);
-            bool simple     = is_constant(f) && !is_metavar(f) && const_name(f).size() <= m_indent + 4;
+            result p        = is_constant(f) ? mk_result(format(const_name(f)), 1) : pp_child(f, depth);
+            bool simple     = is_constant(f) && const_name(f).size() <= m_indent + 4;
             unsigned indent = simple ? const_name(f).size()+1 : m_indent;
             format   r_format = p.first;
             unsigned r_weight = p.second;
@@ -690,14 +707,17 @@ class pp_fn {
         }
     }
 
-    result pp_scoped_child(expr const & e, unsigned depth) {
+    result pp_scoped_child(expr const & e, unsigned depth, unsigned prec = 0) {
         if (is_atomic(e)) {
             return pp(e, depth + 1, true);
         } else {
             mk_scope s(*this);
             result r = pp(e, depth + 1, true);
             if (m_aliases_defs.size() == s.m_old_size) {
-                return r;
+                if (prec <= get_operator_precedence(e))
+                    return r;
+                else
+                    return mk_result(paren(r.first), r.second);
             } else {
                 format r_format   = g_let_fmt;
                 unsigned r_weight = 2;
@@ -719,12 +739,12 @@ class pp_fn {
         }
     }
 
+    result pp_arrow_child(expr const & e, unsigned depth) {
+        return pp_scoped_child(e, depth, g_arrow_precedence + 1);
+    }
+
     result pp_arrow_body(expr const & e, unsigned depth) {
-        if (is_atomic(e) || is_arrow(e)) {
-            return pp(e, depth + 1);
-        } else {
-            return pp_child_with_paren(e, depth);
-        }
+        return pp_scoped_child(e, depth, g_arrow_precedence);
     }
 
     template<typename It>
@@ -740,6 +760,44 @@ class pp_fn {
 
     bool is_implicit(std::vector<bool> const * implicit_args, unsigned arg_pos) {
         return implicit_args && (*implicit_args)[arg_pos];
+    }
+
+    /**
+       \brief Auxiliary method for computing where Pi can be pretty printed as an arrow.
+       Examples:
+       Pi x : Int, Pi y : Int, Int        ===> return 0
+       Pi A : Type, Pi x : A, Pi y : A, A ===> return 1
+       Pi A : Type, Pi x : Int, A         ===> return 1
+       Pi A : Type, Pi x : Int, x > 0     ===> return UINT_MAX (there is no tail that can be printed as a arrow)
+
+       If \c e is not Pi, it returns UINT_MAX
+    */
+    unsigned get_arrow_starting_at(expr e) {
+        if (!is_pi(e))
+            return std::numeric_limits<unsigned>::max();
+        unsigned pos = 0;
+        while (is_pi(e)) {
+            expr e2 = abst_body(e);
+            unsigned num_vars = 1;
+            bool ok = true;
+            while (true) {
+                if (has_free_var(e2, 0, num_vars)) {
+                    ok = false;
+                    break;
+                }
+                if (is_pi(e2)) {
+                    e2 = abst_body(e2);
+                } else {
+                    break;
+                }
+            }
+            if (ok) {
+                return pos;
+            }
+            e = abst_body(e);
+            pos++;
+        }
+        return std::numeric_limits<unsigned>::max();
     }
 
     /**
@@ -763,11 +821,12 @@ class pp_fn {
         local_names::mk_scope mk(m_local_names);
         if (is_arrow(e) && !implicit_args) {
             lean_assert(!T);
-            result p_lhs    = pp_child(abst_domain(e), depth);
+            result p_lhs    = pp_arrow_child(abst_domain(e), depth);
             result p_rhs    = pp_arrow_body(abst_body(e), depth);
             format r_format = group(format{p_lhs.first, space(), m_unicode ? g_arrow_n_fmt : g_arrow_fmt, line(), p_rhs.first});
             return mk_result(r_format, p_lhs.second + p_rhs.second + 1);
         } else {
+            unsigned arrow_starting_at = get_arrow_starting_at(e);
             buffer<std::pair<name, expr>> nested;
             auto p = collect_nested(e, T, e.kind(), nested);
             expr b = p.first;
@@ -818,6 +877,29 @@ class pp_fn {
                     ++it2;
                     bool implicit = is_implicit(implicit_args, arg_pos);
                     ++arg_pos;
+                    if (!implicit_args && arg_pos > arrow_starting_at) {
+                        // The rest is an arrow
+                        // We do not use arrow pp when implicit_args marks are used.
+                        format block;
+                        bool first_domain = true;
+                        for (; it != end; ++it) {
+                            result p_domain = pp_arrow_child(it->second, depth);
+                            r_weight += p_domain.second;
+                            if (first_domain) {
+                                first_domain = false;
+                                block = p_domain.first;
+                            } else {
+                                block += format{space(), m_unicode ? g_arrow_n_fmt : g_arrow_fmt, line(), p_domain.first};
+                            }
+                        }
+                        result p_body = pp_arrow_child(b, depth);
+                        r_weight += p_body.second;
+                        block += format{space(), m_unicode ? g_arrow_n_fmt : g_arrow_fmt, line(), p_body.first};
+                        block = group(block);
+                        format r_format = group(nest(head_indent, format{head, space(), group(bindings), body_sep, line(), block}));
+                        return mk_result(r_format, r_weight);
+                    }
+                    // Continue with standard encoding
                     while (it2 != end && it2->second == it->second && implicit == is_implicit(implicit_args, arg_pos)) {
                         ++it2;
                         ++arg_pos;
@@ -846,11 +928,11 @@ class pp_fn {
         return pp_abstraction_core(e, depth, expr());
     }
 
-    expr collect_nested_let(expr const & e, buffer<std::pair<name, expr>> & bindings) {
+    expr collect_nested_let(expr const & e, buffer<std::tuple<name, expr, expr>> & bindings) {
         if (is_let(e)) {
             name n1    = get_unused_name(e);
             m_local_names.insert(n1);
-            bindings.push_back(mk_pair(n1, let_value(e)));
+            bindings.push_back(std::make_tuple(n1, let_type(e), let_value(e)));
             expr b = instantiate_with_closed(let_body(e), mk_constant(n1));
             return collect_nested_let(b, bindings);
         } else {
@@ -860,19 +942,28 @@ class pp_fn {
 
     result pp_let(expr const & e, unsigned depth) {
         local_names::mk_scope mk(m_local_names);
-        buffer<std::pair<name, expr>> bindings;
+        buffer<std::tuple<name, expr, expr>> bindings;
         expr body = collect_nested_let(e, bindings);
         unsigned r_weight = 2;
         format r_format = g_let_fmt;
         unsigned sz = bindings.size();
         for (unsigned i = 0; i < sz; i++) {
             auto b = bindings[i];
-            name const & n = b.first;
-            result p_def = pp(b.second, depth+1);
+            name const & n = std::get<0>(b);
             format beg = i == 0 ? space() : line();
             format sep = i < sz - 1 ? comma() : format();
-            r_format += nest(3 + 1, format{beg, format(n), space(), g_assign_fmt, nest(n.size() + 1 + 2 + 1, format{space(), p_def.first, sep})});
-            r_weight += p_def.second;
+            result p_def = pp(std::get<2>(b), depth+1);
+            expr type = std::get<1>(b);
+            if (type) {
+                result p_type = pp(type, depth+1);
+                r_format += nest(3 + 1, compose(beg, group(format{format(n), space(),
+                                    colon(), nest(n.size() + 1 + 1 + 1, compose(space(), p_type.first)), space(), g_assign_fmt,
+                                    nest(m_indent, format{line(), p_def.first, sep})})));
+                r_weight += p_type.second + p_def.second;
+            } else {
+                r_format += nest(3 + 1, format{beg, format(n), space(), g_assign_fmt, nest(n.size() + 1 + 2 + 1, format{space(), p_def.first, sep})});
+                r_weight += p_def.second;
+            }
         }
         result p_body = pp(body, depth+1);
         r_weight += p_body.second;
@@ -902,32 +993,6 @@ class pp_fn {
         return mk_result(r_format, p_arg1.second + p_arg2.second + 1);
     }
 
-    result pp_lower(expr const & e, unsigned depth) {
-        expr arg; unsigned s, n;
-        is_lower(e, arg, s, n);
-        result p_arg = pp_child(arg, depth);
-        format r_format = format{g_lower_fmt, colon(), format(s), colon(), format(n), nest(m_indent, compose(line(), p_arg.first))};
-        return mk_result(r_format, p_arg.second + 1);
-     }
-
-     result pp_lift(expr const & e, unsigned depth) {
-        expr arg; unsigned s, n;
-        is_lift(e, arg, s, n);
-        result p_arg = pp_child(arg, depth);
-        format r_format = format{g_lift_fmt, colon(), format(s), colon(), format(n), nest(m_indent, compose(line(), p_arg.first))};
-        return mk_result(r_format, p_arg.second + 1);
-    }
-
-    result pp_subst(expr const & e, unsigned depth) {
-        expr arg, v; unsigned i;
-        is_subst(e, arg, i, v);
-        result p_arg = pp_child(arg, depth);
-        result p_v   = pp_child(v, depth);
-        format r_format = format{g_subst_fmt, colon(), format(i),
-                                 nest(m_indent, format{line(), p_arg.first, line(), p_v.first})};
-        return mk_result(r_format, p_arg.second + p_v.second + 1);
-    }
-
     result pp_choice(expr const & e, unsigned depth) {
         lean_assert(is_choice(e));
         unsigned num = get_num_choices(e);
@@ -944,6 +1009,36 @@ class pp_fn {
         return mk_result(r_format, r_weight+1);
     }
 
+    result pp_metavar(expr const & a, unsigned depth) {
+        format mv_fmt = compose(format("?M"), format(metavar_idx(a)));
+        if (metavar_ctx(a)) {
+            format ctx_fmt;
+            bool first = true;
+            unsigned r_weight = 1;
+            for (meta_entry const & e : metavar_ctx(a)) {
+                format e_fmt;
+                switch (e.kind()) {
+                case meta_entry_kind::Lift:   e_fmt = format{g_lift_fmt, colon(), format(e.s()), colon(), format(e.n())}; break;
+                case meta_entry_kind::Lower:  e_fmt = format{g_lower_fmt, colon(), format(e.s()), colon(), format(e.n())}; break;
+                case meta_entry_kind::Subst:   {
+                    auto p_e = pp_child_with_paren(e.v(), depth);
+                    r_weight += p_e.second;
+                    e_fmt = format{g_subst_fmt, colon(), format(e.s()), space(), nest(m_indent, p_e.first)};
+                    break;
+                }}
+                if (first) {
+                    ctx_fmt = e_fmt;
+                    first = false;
+                } else {
+                    ctx_fmt += compose(line(), e_fmt);
+                }
+            }
+            return mk_result(group(compose(mv_fmt, nest(m_indent, format{lsb(), ctx_fmt, rsb()}))), r_weight);
+        } else {
+            return mk_result(mv_fmt, 1);
+        }
+    }
+
     result pp(expr const & e, unsigned depth, bool main = false) {
         check_interrupted(m_interrupted);
         if (!is_atomic(e) && (m_num_steps > m_max_steps || depth > m_max_depth)) {
@@ -958,12 +1053,6 @@ class pp_fn {
             result r;
             if (is_choice(e)) {
                 return pp_choice(e, depth);
-            } else if (is_lower(e)) {
-                r = pp_lower(e, depth);
-            } else if (is_lift(e)) {
-                r = pp_lift(e, depth);
-            } else if (is_subst(e)) {
-                r = pp_subst(e, depth);
             } else {
                 switch (e.kind()) {
                 case expr_kind::Var:        r = pp_var(e);                break;
@@ -975,6 +1064,7 @@ class pp_fn {
                 case expr_kind::Type:       r = pp_type(e);               break;
                 case expr_kind::Eq:         r = pp_eq(e, depth);          break;
                 case expr_kind::Let:        r = pp_let(e, depth);         break;
+                case expr_kind::MetaVar:    r = pp_metavar(e, depth);     break;
                 }
             }
             if (!main && m_extra_lets && is_shared(e) && r.second > m_alias_min_weight) {
@@ -1177,7 +1267,15 @@ class pp_formatter_cell : public formatter_cell {
     }
 
     format pp_definition(object const & obj, options const & opts) {
-        return pp_compact_definition(obj.keyword(), obj.get_name(), obj.get_type(), obj.get_value(), opts);
+        if (m_frontend.is_explicit(obj.get_name())) {
+            // Hide implicit arguments when pretty printing the
+            // explicit version on an object.
+            // We do that because otherwise it looks like a recursive definition.
+            options new_opts = update(opts, g_pp_implicit, false);
+            return pp_compact_definition(obj.keyword(), obj.get_name(), obj.get_type(), obj.get_value(), new_opts);
+        } else {
+            return pp_compact_definition(obj.keyword(), obj.get_name(), obj.get_type(), obj.get_value(), opts);
+        }
     }
 
     format pp_notation_decl(object const & obj, options const & opts) {
@@ -1277,8 +1375,14 @@ formatter mk_pp_formatter(frontend const & fe) {
 
 std::ostream & operator<<(std::ostream & out, frontend const & fe) {
     options const & opts = fe.get_state().get_options();
-    formatter fmt = smt::mk_pp_formatter(fe);
-    out << mk_pair(fmt(fe, opts), opts);
+    formatter fmt = mk_pp_formatter(fe);
+    bool first = true;
+    std::for_each(fe.begin_objects(),
+                  fe.end_objects(),
+                  [&](object const & obj) {
+                      if (first) first = false; else out << "\n";
+                      out << mk_pair(fmt(obj, opts), opts);
+                  });
     return out;
 }
 }

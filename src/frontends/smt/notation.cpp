@@ -21,11 +21,11 @@ void init_builtin_notation(frontend & f) {
     f.add_prefix("not", 40, mk_not_fn());
     f.add_prefixl("and", 35, mk_and_fn());
     f.add_prefixl("or",  30, mk_or_fn());
-    //f.add_prefix("xor",  30, mk_xor_fn());
+    // f.add_prefix("xor",  30, mk_xor_fn());
     f.add_prefixr("=>",  25, mk_implies_fn());
-    //f.add_prefix?("ite",  25, mk_ite_fn());
-    //f.add_prefixc("=",  25, mk_eq_fn());
-    //f.add_prefixp("distinct",  25, mk_distinct_fn());
+    // f.add_prefix?("ite",  25, mk_ite_fn());
+    // f.add_prefixc("=",  25, mk_eq_fn());
+    // f.add_prefixp("distinct",  25, mk_distinct_fn());
 
     f.add_prefixc("<", 50, mk_nat_lt_fn());
     f.add_prefixc(">", 50, mk_nat_gt_fn());

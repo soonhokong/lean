@@ -392,7 +392,7 @@ class parser::imp {
     }
 
     expr parse_string() {
-        /* TODO */
+        // TODO(soonho)
         not_implemented_yet();
     }
 
@@ -522,8 +522,10 @@ class parser::imp {
             val = parse_sexpr();
             check_rparen_next("')' expected in parse_attribute");
             break;
-        default:
-            /* nothing */
+            // default:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::Eof:
             break;
         }
         return std::make_tuple(key, val);
@@ -531,7 +533,7 @@ class parser::imp {
 
     expr parse_id_terms() {
         /* <term> ::= ( <qual_identifier> <term>+ ) */
-        /* TODO */
+        // TODO(soonho)
         not_implemented_yet();
     }
 
@@ -777,9 +779,21 @@ class parser::imp {
                     return parse_prefix(op);
                 case fixity::Mixfixl: return parse_mixfixl(op);
                 case fixity::Mixfixc: return parse_mixfixc(op);
-                default:
-                    std::cout << "parse_nud_id: " << id << " something is wrong" << std::endl;
-                    lean_unreachable(); return expr();
+
+                // TODO(soonho): Handle the following cases
+                case fixity::Prefixl:
+                case fixity::Prefixr:
+                case fixity::Prefixc:
+                case fixity::Prefixp:
+                case fixity::Mixfixr:
+                case fixity::Mixfixo:
+                case fixity::Infixl:
+                case fixity::Infixr:
+                case fixity::Infix:
+                case fixity::Postfix:
+                    // case default:
+                         std::cout << "parse_nud_id: " << id << " something is wrong" << std::endl;
+                         lean_unreachable(); return expr();
                 }
             } else {
                 std::cout << "parse_nud_id: " << id << " is not an operator" << std::endl;
@@ -840,7 +854,15 @@ class parser::imp {
             check_rparen_next("')' expected in parse_sort()");
             return s;
         }
-        default:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::StringVal:
+        case scanner::token::NumVal:
+        case scanner::token::DecVal:
+        case scanner::token::HexVal:
+        case scanner::token::BinVal:
+        case scanner::token::Eof:
+        // default:
             throw parser_error("parse error in parse_sort()", pos());
         }
     }
@@ -859,13 +881,21 @@ class parser::imp {
             expr id = parse_nud_id();
             expr s = parse_sort();
             check_rparen_next("')' expected in parse_qual_id()");
-            /* TODO */
+            // TODO(soonho)
             break;
         }
-        default:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::StringVal:
+        case scanner::token::NumVal:
+        case scanner::token::DecVal:
+        case scanner::token::HexVal:
+        case scanner::token::BinVal:
+        case scanner::token::Eof:
+            // default:
             throw parser_error("parse error in parse_sort()", pos());
         }
-        /* TODO */
+        // TODO(soonho)
         not_implemented_yet();
     }
 
@@ -922,7 +952,10 @@ class parser::imp {
         case scanner::token::StringVal: return parse_string();
         case scanner::token::LeftParen: return parse_lparen();
         case scanner::token::Symbol:    return parse_nud_id();
-        default:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::Eof:
+            // default:
             throw parser_error("unexpected token in parse_nud()", pos());
         }
     }
@@ -949,7 +982,11 @@ class parser::imp {
         case scanner::token::BinVal:    return mk_app_left(left, parse_bin());
         case scanner::token::DecVal:    return mk_app_left(left, parse_dec());
         case scanner::token::StringVal: return mk_app_left(left, parse_string());
-        default:                        return left;
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::Eof:
+        // default:
+            throw parser_error("unexpected token in parse_led()", pos());
         }
     }
 
@@ -972,7 +1009,9 @@ class parser::imp {
         case scanner::token::LeftParen: case scanner::token::NumVal: case scanner::token::DecVal:
         case scanner::token::BinVal:    case scanner::token::HexVal: case scanner::token::StringVal:
             return 1;
-        default:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::Eof:
             return 0;
         }
     }
@@ -1025,8 +1064,7 @@ class parser::imp {
         next();
         if (m_verbosity > 0)
             regular(m_frontend) << "  check-sat: " << endl;
-        /* TODO: what should we construct for "check-sat" on the
-           kernel side? */
+        // TODO(soonho): what should we construct for "check-sat" on the kernel side?
     }
     void parse_declare_fun() {
         /* <command> ::= ( declare-fun <symbol> ( <sort>* ) <sort> ) */
@@ -1157,17 +1195,17 @@ class parser::imp {
         /* <command> ::= ( exit ) */
         next();
         /* Nothing */
-        /* TODO: what should we construct for this? */
+        // TODO(soonho): what should we construct for this?
     }
     void parse_get_assertions() {
         /* <command> ::= ( get-assertions ) */
         next();
-        /* TODO */
+        // TODO(soonho)
     }
     void parse_get_assignment() {
         /* <command> ::= ( get-assignment ) */
         next();
-        /* TODO */
+        // TODO(soonho)
     }
 
     name parse_info_flag() {
@@ -1186,7 +1224,7 @@ class parser::imp {
         /* <command> ::= ( get-info <info_flag> ) */
         next();
         parse_info_flag();
-        /* TODO */
+        // TODO(soonho)
     }
     void parse_get_option() {
         /* <command> ::= ( get-option <keyword> ) */
@@ -1243,21 +1281,21 @@ class parser::imp {
     void parse_get_proof() {
         /* <command> ::= ( get-proof ) */
         next();
-        /* TODO */
+        // TODO(soonho)
     }
     void parse_get_unsat_core() {
         /* <command> ::= ( get-unsat-core ) */
         next();
-        /* TODO */
+        // TODO(soonho)
     }
     void parse_get_value() {
         /* <command> ::= ( get-value ( <term> + ) ) */
         next();
         check_lparen_next("'(' expected in parse_get_value()");
-        /* TODO: process <term>+ */
+        // TODO(soonho): process <term>+
         expr term = parse_term();
         check_rparen_next("')' expected in parse_get_value()");
-        /* TODO */
+        // TODO(soonho)
     }
     void parse_pop() {
         /* <command> ::= ( pop <numeral> ) */
@@ -1285,13 +1323,13 @@ class parser::imp {
         /* <command> ::= ( set-info <attribute> ) */
         next();
         std::tuple<name, sexpr> attr = parse_attribute();
-        /* TODO */
+        // TODO(soonho)
     }
 
     void parse_set_logic() {
         next();
         name logic = check_symbol_next("logic symbol is expected.");
-        /* TODO */
+        // TODO(soonho)
     }
 
     name parse_keyword() {
@@ -1313,7 +1351,12 @@ class parser::imp {
             return parse_bin();
         case scanner::token::StringVal:
             return parse_string();
-        default:
+        case scanner::token::LeftParen:
+        case scanner::token::RightParen:
+        case scanner::token::Keyword:
+        case scanner::token::Symbol:
+        case scanner::token::Eof:
+            // default:
             throw parser_error("parse error in parse_spec_constant", pos());
         }
     }
@@ -1330,14 +1373,16 @@ class parser::imp {
         case scanner::token::Symbol:
             return parse_nud_id();
         case scanner::token::Keyword:
-            return parse_nud_id(); /* TODO: what's the meaning of keyword in sexpression? */
+            return parse_nud_id(); // TODO(Soonho): what's the meaning of keyword in sexpression? */
         case scanner::token::LeftParen: {
             next();
             expr t = parse_sexpr();
             check_rparen_next("')' expected in parse_sexpr");
             return t;
         }
-        default:
+        case scanner::token::RightParen:
+        case scanner::token::Eof:
+        // default:
             throw parser_error("parse error in parse_sexpr()", pos());
         }
     }
@@ -1355,7 +1400,7 @@ class parser::imp {
         /*              :random-seed               <numeral>, default = 0 */
         /*              :verbosity                 <numeral>, default = 0 */
         /*              <attribute>                          */
-        /* TODO */
+        // TODO(soonho)
         return parse_attribute();
     }
 
@@ -1373,17 +1418,17 @@ class parser::imp {
         case sexpr_kind::DOUBLE:
             return DoubleOption;
         case sexpr_kind::NAME:
-            /* TODO */
+            // TODO(soonho)
             return StringOption;
         case sexpr_kind::MPZ:
-            /* TODO */
+            // TODO(soonho)
             return IntOption;
         case sexpr_kind::MPQ:
-            /* TODO */
+            // TODO(soonho)
             return DoubleOption;
-        default:
-            /* TODO */
-            return DoubleOption;
+        // default:
+        // TODO(soonho)
+        //     return DoubleOption;
         }
     }
 
@@ -1559,7 +1604,15 @@ public:
                 case scanner::token::LeftParen: parse_command(); break;
 //                case scanner::token::Period: show_prompt(); next(); break;
                 case scanner::token::Eof: return !m_found_errors;
-                default:
+                case scanner::token::RightParen:
+                case scanner::token::NumVal:
+                case scanner::token::DecVal:
+                case scanner::token::HexVal:
+                case scanner::token::BinVal:
+                case scanner::token::StringVal:
+                case scanner::token::Keyword:
+                case scanner::token::Symbol:
+                // default:
                     std::cerr << "Error in Parse_command: |" << curr() << " " << std::endl;
                     next();
                     throw parser_error("Command expected", pos());

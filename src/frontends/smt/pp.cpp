@@ -661,7 +661,12 @@ class pp_fn {
                     r_format += format{space(), format(*it)};
                 }
                 return mk_result(group(r_format), r_weight);
-            }}
+            }
+            case fixity::Prefixl: case fixity::Prefixr:
+            case fixity::Prefixc: case fixity::Prefixp: {
+                // TODO(soonho)
+            }
+            }
             lean_unreachable();
             return mk_result(format(), 0);
         } else if (m_notation && is_forall_expr(e)) {

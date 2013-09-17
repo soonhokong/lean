@@ -14,19 +14,19 @@ Author: Leonardo de Moura
 using namespace lean;
 using namespace smt;
 
-static void parse(frontend & fe, char const * str) {
-    frontend child = fe.mk_child();
-    std::istringstream in(str);
-    if (parse_commands(child, in)) {
-        formatter fmt = mk_pp_formatter(child);
-        std::for_each(child.begin_local_objects(),
-                      child.end_local_objects(),
-                      [&](object const & obj) {
-                          std::cout << fmt(obj) << "\n";
-                          std::cout << obj << "\n";
-                      });
-    }
-}
+// static void parse(frontend & fe, char const * str) {
+//     frontend child = fe.mk_child();
+//     std::istringstream in(str);
+//     if (parse_commands(child, in)) {
+//         formatter fmt = mk_pp_formatter(child);
+//         std::for_each(child.begin_local_objects(),
+//                       child.end_local_objects(),
+//                       [&](object const & obj) {
+//                           std::cout << fmt(obj) << "\n";
+//                           std::cout << obj << "\n";
+//                       });
+//     }
+// }
 
 // static void tst1() {
 //     frontend fe;

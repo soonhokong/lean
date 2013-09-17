@@ -613,17 +613,25 @@ class parser::imp {
     /** \brief Parse a user defined prefix operator. */
     expr parse_prefixl(operator_info const & op) {
         // TODO(soonho)
-        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
-        auto p = pos();
-        auto t = parse_term(op.get_precedence());
-        std::cout << "parse_prefix : term = " << t << std::endl;
-        return mk_application(op, p, t);
+        std::cout << "!!!parse_prefixl : " << op.get_op_name() << std::endl;
+        while(true) {
+            auto lbp = curr_lbp();
+            std::cout << "parse_prefixl : curr = " << curr()
+                      << " prec = " << op.get_precedence()
+                      << " cur_lbp = " << lbp;
+
+            auto t = parse_term(op.get_precedence());
+            std::cout << " term = " << t
+                      <<std::endl;
+        }
+//        return mk_application(op, p, t);
+        throw parser_error("parse_prefixl", pos());
     }
 
     /** \brief Parse a user defined prefix operator. */
     expr parse_prefixr(operator_info const & op) {
         // TODO(soonho)
-        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        std::cout << "parse_prefixr : " << op.get_op_name() << std::endl;
         auto p = pos();
         auto t = parse_term(op.get_precedence());
         std::cout << "parse_prefix : term = " << t << std::endl;
@@ -633,7 +641,7 @@ class parser::imp {
     /** \brief Parse a user defined prefix operator. */
     expr parse_prefixc(operator_info const & op) {
         // TODO(soonho)
-        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        std::cout << "parse_prefixc : " << op.get_op_name() << std::endl;
         auto p = pos();
         auto t = parse_term(op.get_precedence());
         std::cout << "parse_prefix : term = " << t << std::endl;
@@ -643,7 +651,7 @@ class parser::imp {
     /** \brief Parse a user defined prefix operator. */
     expr parse_prefixp(operator_info const & op) {
         // TODO(soonho)
-        std::cout << "parse_prefix : " << op.get_op_name() << std::endl;
+        std::cout << "parse_prefixp : " << op.get_op_name() << std::endl;
         auto p = pos();
         auto t = parse_term(op.get_precedence());
         std::cout << "parse_prefix : term = " << t << std::endl;
@@ -779,12 +787,20 @@ class parser::imp {
                     return parse_prefix(op);
                 case fixity::Mixfixl: return parse_mixfixl(op);
                 case fixity::Mixfixc: return parse_mixfixc(op);
+                case fixity::Prefixl:
+                    std::cout << "parse_nud_id: " << id << " is prefixl operator" << std::endl;
+                    return parse_prefixl(op);
+                case fixity::Prefixr:
+                    std::cout << "parse_nud_id: " << id << " is prefixr operator" << std::endl;
+                    return parse_prefixr(op);
+                case fixity::Prefixc:
+                    std::cout << "parse_nud_id: " << id << " is prefixc operator" << std::endl;
+                    return parse_prefixc(op);
+                case fixity::Prefixp:
+                    std::cout << "parse_nud_id: " << id << " is prefixp operator" << std::endl;
+                    return parse_prefixp(op);
 
                 // TODO(soonho): Handle the following cases
-                case fixity::Prefixl:
-                case fixity::Prefixr:
-                case fixity::Prefixc:
-                case fixity::Prefixp:
                 case fixity::Mixfixr:
                 case fixity::Mixfixo:
                 case fixity::Infixl:
@@ -1009,10 +1025,11 @@ class parser::imp {
         case scanner::token::LeftParen: case scanner::token::NumVal: case scanner::token::DecVal:
         case scanner::token::BinVal:    case scanner::token::HexVal: case scanner::token::StringVal:
             return 1;
-        case scanner::token::RightParen:
         case scanner::token::Keyword:
-        case scanner::token::Eof:
             return 0;
+        case scanner::token::RightParen:
+        case scanner::token::Eof:
+            return 999;
         }
     }
 
@@ -1020,6 +1037,7 @@ class parser::imp {
         std::cout << "parse_term" << std::endl;
         expr left = parse_nud();
         while (rbp < curr_lbp()) {
+            std::cout << "here!!!" << std::endl;
             left = parse_led(left);
         }
         return left;

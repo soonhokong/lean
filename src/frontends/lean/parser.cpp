@@ -1067,11 +1067,13 @@ class parser::imp {
         if (is_definition) {
             m_frontend.add_definition(id, type, val);
             if (m_verbose)
-                regular(m_frontend) << "  Defined: " << id << endl;
+              regular(m_frontend) << "  Defined: " << id 
+                                  << " : " << type << endl;
         } else {
             m_frontend.add_theorem(id, type, val);
             if (m_verbose)
-                regular(m_frontend) << "  Proved: " << id << endl;
+                regular(m_frontend) << "  Proved: " << id 
+                                    << " : " << type << endl;
         }
         register_implicit_arguments(id, bindings);
     }
@@ -1119,7 +1121,8 @@ class parser::imp {
         else
             m_frontend.add_axiom(id, type);
         if (m_verbose)
-            regular(m_frontend) << "  Assumed: " << id << endl;
+            regular(m_frontend) << "  Assumed: " << id 
+                                << " : " << type << endl;
         register_implicit_arguments(id, bindings);
     }
 

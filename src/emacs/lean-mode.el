@@ -1,6 +1,7 @@
 ;;; lean-mode.el --- Emacs mode for Lean theorem prover
 ;;
-;; Copyright (c) 2013, 2014 Microsoft Corporation. All rights reserved.
+;; Copyright (c) 2013, 2014, 2015 Microsoft Corporation. All rights reserved.
+;; Copyright (c) 2015, Soonho Kong. All rights reserved.
 ;;
 ;; Author: Leonardo de Moura <leonardo@microsoft.com>
 ;;         Soonho Kong       <soonhok@cs.cmu.edu>
@@ -12,8 +13,9 @@
 ;;
 ;; Released under Apache 2.0 license as described in the file LICENSE.
 ;;
-(require 'pcase)
 (require 'lean-require)
+(lean-setup-required-packages)
+(require 'pcase)
 (require 'eri)
 (require 'lean-variable)
 (require 'lean-util)
@@ -154,6 +156,8 @@ enabled and disabled respectively.")
 
 (defun lean-mode-setup ()
   "Default lean-mode setup"
+  (lean-setup-rootdir)
+  (lean-setup-emacs-path)
   ;; Flycheck
   (when lean-flycheck-use
     (lean-flycheck-turn-on)

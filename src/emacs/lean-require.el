@@ -3,6 +3,23 @@
 ;;
 ;; Author: Soonho Kong
 ;;
+(require 'package)
+
+(defvar lean-mode-required-packages
+  '(company dash dash-functional flycheck f fill-column-indicator s lua-mode mmm-mode))
+
+(defun lean-setup-required-packages ()
+  "Install required/optional packages for lean-mode "
+  (let ((uninstalled-packages
+         (--filter (not (package-installed-p it))
+                   lean-mode-required-packages)))
+    (when uninstalled-packages
+      (add-to-list 'package-archives '("gnu" . "http://elpa.gnu.org/packages/") t)
+      (add-to-list 'package-archives '("melpa" . "http://melpa.milkbox.net/packages/") t)
+      (package-initialize)
+      (package-refresh-contents)
+      (--map (package-install it) uninstalled-packages))))
+
 (defun lean-mode-require-package (pkg)
   "Check whether pkg is available or not."
   (unless (featurep pkg)

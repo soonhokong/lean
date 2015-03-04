@@ -10,6 +10,38 @@
 (require 'dash)
 (require 'dash-functional)
 
+(defun lean-setup-rootdir ()
+  "Set up lean-rootdir"
+  (if (or (not (boundp 'lean-rootdir))
+        (not lean-rootdir))
+    (let* ((candidates
+          '("/usr" "/usr/local" "/opt/local" "~/work/lean"))
+         (filtered-candidates
+          (--filter (f-exists? (f-join it "bin" "lean")) candidates))
+         (candidate (-first-item filtered-candidates)))
+    (unless candidate
+      (user-error "%S is not set, and we cannot find it from pre-defined candidate locations: %S"
+                  'lean-root-dir
+                  candidates))
+    (setq lean-rootdir candidate))))
+
+(defun lean-setup-emacs-path ()
+  "Set up lean-emacs-path"
+  (if (or (not (boundp 'lean-emacs-path))
+          (not lean-emacs-path))
+      (let* ((candidate-postfixes
+              `(,(f-join "src" "emacs")
+                ,(f-join "share" "emacs" "site-lisp" "lean")))
+             (candidates (--map (f-join lean-rootdir it) candidate-postfixes))
+             (filtered-candidates
+              (-filter 'f-exists? candidates))
+             (candidate (-first-item filtered-candidates)))
+        (unless candidate
+          (user-error "%S is not set, and we cannot find it from pre-defined candidate locations: %S"
+                      'lean-emacs-path
+                      candidates))
+        (setq lean-emacs-path candidate))))
+
 (defun lean-concat-paths (&rest seq)
   "Concatenate paths"
   (cl-reduce (lambda (p1 p2) (concat (file-name-as-directory p1) p2))

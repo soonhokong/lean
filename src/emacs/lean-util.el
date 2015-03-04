@@ -15,7 +15,7 @@
   (if (or (not (boundp 'lean-rootdir))
         (not lean-rootdir))
     (let* ((candidates
-          '("/usr" "/usr/local" "/opt/local" "~/work/lean"))
+          '("/usr" "/usr/local" "/opt/local"))
          (filtered-candidates
           (--filter (f-exists? (f-join it "bin" "lean")) candidates))
          (candidate (-first-item filtered-candidates)))

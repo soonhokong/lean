@@ -2,10 +2,12 @@
 Copyright (c) 2015 Microsoft Corporation. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 
-Author: Leonardo de Moura
+Author: Leonardo de Moura, Soonho Kong
 */
 #include <string>
+#include "util/lean_path.h"
 #include "library/module.h"
+#include "library/hott_kernel.h"
 #include "library/standard_kernel.h"
 #include "library/type_context.h"
 #include "library/error_handling.h"
@@ -24,8 +26,9 @@ private:
     io_state ios;
 
 public:
-    emscripten_shell() : trust_lvl(LEAN_BELIEVER_TRUST_LEVEL+1), num_threads(1), opts("flycheck", true),
-        env(mk_environment(trust_lvl)), ios(opts, lean::mk_pretty_formatter_factory()) {
+    emscripten_shell(bool const use_hott) : trust_lvl(LEAN_BELIEVER_TRUST_LEVEL+1), num_threads(1), opts("flycheck", true),
+                                            env(use_hott ? mk_hott_environment(trust_lvl) : mk_environment(trust_lvl)),
+                                            ios(opts, lean::mk_pretty_formatter_factory()) {
     }
 
     int import_module(std::string mname) {
@@ -68,9 +71,12 @@ public:
 static lean::initializer * g_init = nullptr;
 static lean::emscripten_shell * g_shell = nullptr;
 
-void initialize_emscripten() {
+void initialize_emscripten(bool use_hott) {
     g_init  = new lean::initializer();
-    g_shell = new lean::emscripten_shell();
+    if (use_hott) {
+        lean::initialize_lean_path(true);
+    }
+    g_shell = new lean::emscripten_shell(use_hott);
 }
 
 void finalize_emscripten() {

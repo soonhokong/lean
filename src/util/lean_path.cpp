@@ -119,7 +119,10 @@ std::string get_path(std::string f) {
 
 void init_lean_path(bool use_hott) {
 #if defined(LEAN_EMSCRIPTEN)
-    *g_lean_path = "/library";
+    if (use_hott)
+        *g_lean_path = "/hott";
+    else
+        *g_lean_path = "/library";
     g_lean_path_vector->push_back(*g_lean_path);
 #else
     char * r = nullptr;

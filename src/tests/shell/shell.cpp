@@ -11,7 +11,7 @@ using namespace lean;
 
 int main() {
     save_stack_info();
-    initialize_emscripten();
+    initialize_emscripten(false);
     emscripten_import_module("standard");
     int r = emscripten_process_file("file1.lean");
     if (r != 0)

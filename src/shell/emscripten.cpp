@@ -27,7 +27,7 @@ private:
 
 public:
     emscripten_shell(bool const use_hott) : trust_lvl(LEAN_BELIEVER_TRUST_LEVEL+1), num_threads(1), opts("flycheck", true),
-                                            env(use_hott ? mk_hott_environment(trust_lvl) : mk_environment(trust_lvl)),
+                                            env(mk_environment(trust_lvl)),
                                             ios(opts, lean::mk_pretty_formatter_factory()) {
     }
 
@@ -73,9 +73,9 @@ static lean::emscripten_shell * g_shell = nullptr;
 
 void initialize_emscripten(bool use_hott) {
     g_init  = new lean::initializer();
-    if (use_hott) {
-        lean::initialize_lean_path(true);
-    }
+//    if (use_hott) {
+//        lean::initialize_lean_path(true);
+//    }
     g_shell = new lean::emscripten_shell(use_hott);
 }
 

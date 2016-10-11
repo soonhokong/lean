@@ -7,7 +7,7 @@ Author: Leonardo de Moura, Soonho Kong
 #include <string>
 #include "util/lean_path.h"
 #include "library/module.h"
-#include "library/hott_kernel.h"
+//#include "library/hott_kernel.h"
 #include "library/standard_kernel.h"
 #include "library/type_context.h"
 #include "library/error_handling.h"
